@@ -103,6 +103,7 @@ button, input, select, textarea{ font-family:inherit; }
   flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
   padding-bottom:80px; text-align:center; gap:4px;
 }
+.empty-state[hidden]{ display:none; }
 .empty-title{ font-family:var(--font-display); font-size:16px; margin:0; color:var(--text-dim); }
 .empty-sub{ font-size:13px; color:var(--text-dim); margin:0; }
 
@@ -232,9 +233,9 @@ button, input, select, textarea{ font-family:inherit; }
 
 .ingredient-rows{ display:flex; flex-direction:column; gap:8px; }
 .ingredient-row{ display:flex; gap:8px; }
-.ingredient-row input:nth-child(1){ flex:2; }
-.ingredient-row input:nth-child(2){ flex:1; width:0; }
-.ingredient-row input:nth-child(3){ flex:1; width:0; }
+.ingredient-row .ing-name{ flex:2; }
+.ingredient-row .ing-amount{ flex:1; width:0; }
+.ingredient-row .ing-unit{ flex:1; width:0; }
 .ingredient-row button{
   flex:0 0 auto; background:var(--surface); border:1px solid var(--border);
   color:var(--danger); border-radius:8px; width:38px; font-size:16px; cursor:pointer;

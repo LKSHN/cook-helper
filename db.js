@@ -1,49 +1,38 @@
-// db.js — tiny IndexedDB wrapper. All data lives on-device, no network needed.
-const DB_NAME = 'the-rail-db';
-const DB_VERSION = 1;
-const STORE = 'recipes';
+// db.js — Firestore-backed store, shared across everyone who opens the app.
+// Offline-first: writes/reads work without a connection and sync when back online.
 
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        const store = db.createObjectStore(STORE, { keyPath: 'id' });
-        store.createIndex('category', 'category', { unique: false });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
+// 1. Go to https://console.firebase.google.com -> create a project
+// 2. Build > Firestore Database -> Create database (start in production mode)
+// 3. Project settings (gear icon) > General > Your apps > Add app > Web (</>)
+// 4. Copy the firebaseConfig object it gives you and paste it below.
+const firebaseConfig = {
+  apiKey: "AIzaSyA_ukZROtZ4GGybwmzxdi8O5_DNitjs_Fs",
+  authDomain: "the-rail-36c77.firebaseapp.com",
+  projectId: "the-rail-36c77",
+  storageBucket: "the-rail-36c77.firebasestorage.app",
+  messagingSenderId: "515103130548",
+  appId: "1:515103130548:web:82121adcab2eaed8cc28e1"
+};
+
+firebase.initializeApp(firebaseConfig);
+const firestore = firebase.firestore();
+firestore.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+
+const recipesRef = firestore.collection('recipes');
 
 const RailDB = {
-  async getAll() {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readonly');
-      const req = tx.objectStore(STORE).getAll();
-      req.onsuccess = () => resolve(req.result || []);
-      req.onerror = () => reject(req.error);
+  // Subscribes to live changes; calls cb(recipes) immediately and on every
+  // local or remote change. Returns an unsubscribe function.
+  onChange(cb) {
+    return recipesRef.onSnapshot((snap) => {
+      cb(snap.docs.map((d) => d.data()));
     });
   },
   async put(recipe) {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).put(recipe);
-      tx.oncomplete = () => resolve(recipe);
-      tx.onerror = () => reject(tx.error);
-    });
+    await recipesRef.doc(recipe.id).set(recipe);
+    return recipe;
   },
   async remove(id) {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).delete(id);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
+    await recipesRef.doc(id).delete();
   }
 };

@@ -29,6 +29,8 @@ const CAT_LABELS = {
   sauces: 'Sauces & Dressings'
 };
 
+const UNITS = ['gr', 'kg', 'L', 'mL', 'CaS', 'CaC', 'pincée', 'pièce', 'botte', 'None'];
+
 function uid() {
   return 'r_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
@@ -43,9 +45,11 @@ function showToast(msg) {
   setTimeout(() => { t.hidden = true; }, 2000);
 }
 
-async function loadRecipes() {
-  recipes = await RailDB.getAll();
-  render();
+function loadRecipes() {
+  RailDB.onChange((data) => {
+    recipes = data;
+    render();
+  });
 }
 
 function filteredRecipes() {
@@ -103,12 +107,39 @@ searchInput.addEventListener('input', (e) => {
   render();
 });
 
+// ---- Overlay navigation (supports phone back button / swipe-back) ----
+// Opening a recipe or the form pushes one history entry; the back button
+// or gesture then closes it instead of leaving the app. The X buttons still
+// work — they just go through history.back() so the state stays in sync.
+function pushOverlayState() {
+  if (!(history.state && history.state.railOverlay)) {
+    history.pushState({ railOverlay: true }, '');
+  }
+}
+
+function hideOverlays() {
+  ticketOverlay.hidden = true;
+  formOverlay.hidden = true;
+  currentTicketId = null;
+}
+
+function closeOverlay() {
+  if (history.state && history.state.railOverlay) {
+    history.back();
+  } else {
+    hideOverlays();
+  }
+}
+
+window.addEventListener('popstate', hideOverlays);
+
 // ---- Ticket detail view ----
 function openTicket(id) {
   const r = recipes.find(x => x.id === id);
   if (!r) return;
   currentTicketId = id;
   renderTicket(r, r.servings || 4);
+  pushOverlayState();
   ticketOverlay.hidden = false;
 }
 
@@ -141,12 +172,12 @@ function renderTicket(r, servings) {
     <div class="ticket-section-title">Method</div>
     <ol class="steps-list">${stepsHtml || '<li>No steps listed</li>'}</ol>
 
-    <button class="ticket-edit-btn" id="ticketEditBtn">Edit ticket</button>
+    <button class="ticket-edit-btn" id="ticketEditBtn">Edit recipe</button>
   `;
 
-  document.getElementById('ticketCloseBtn').addEventListener('click', closeTicket);
+  document.getElementById('ticketCloseBtn').addEventListener('click', closeOverlay);
   document.getElementById('ticketEditBtn').addEventListener('click', () => {
-    closeTicket();
+    ticketOverlay.hidden = true;
     openForm(r.id);
   });
   document.getElementById('servDown').addEventListener('click', () => {
@@ -166,14 +197,9 @@ function scaleAmount(amount, factor) {
   return (Math.round(scaled * 100) / 100).toString();
 }
 
-function closeTicket() {
-  ticketOverlay.hidden = true;
-  currentTicketId = null;
-}
-
 // ---- Add / Edit form ----
 addBtn.addEventListener('click', () => openForm());
-formClose.addEventListener('click', closeForm);
+formClose.addEventListener('click', closeOverlay);
 
 function openForm(id) {
   recipeForm.reset();
@@ -183,34 +209,34 @@ function openForm(id) {
 
   if (id) {
     const r = recipes.find(x => x.id === id);
-    formTitle.textContent = 'Edit Ticket';
+    formTitle.textContent = 'Edit Recipe';
     document.getElementById('recipeId').value = r.id;
     document.getElementById('fName').value = r.name;
     document.getElementById('fCategory').value = r.category;
-    document.getElementById('fServings').value = r.servings || 4;
     document.getElementById('fSteps').value = (r.steps || []).join('\n');
     document.getElementById('fNotes').value = r.notes || '';
     (r.ingredients || []).forEach(ing => addIngredientRow(ing.name, ing.amount, ing.unit));
     fDelete.hidden = false;
   } else {
-    formTitle.textContent = 'New Ticket';
+    formTitle.textContent = 'New Recipe';
     addIngredientRow();
   }
 
+  pushOverlayState();
   formOverlay.hidden = false;
-}
-
-function closeForm() {
-  formOverlay.hidden = true;
 }
 
 function addIngredientRow(name = '', amount = '', unit = '') {
   const row = document.createElement('div');
   row.className = 'ingredient-row';
+  const unitOptions = UNITS.map(u => {
+    const val = u === 'None' ? '' : u;
+    return `<option value="${val}" ${unit === val ? 'selected' : ''}>${u}</option>`;
+  }).join('');
   row.innerHTML = `
     <input type="text" placeholder="Ingredient" class="ing-name" value="${escapeHtml(name)}">
     <input type="text" placeholder="Qty" class="ing-amount" value="${escapeHtml(amount)}">
-    <input type="text" placeholder="Unit" class="ing-unit" value="${escapeHtml(unit)}">
+    <select class="ing-unit">${unitOptions}</select>
     <button type="button" aria-label="Remove ingredient">&times;</button>
   `;
   row.querySelector('button').addEventListener('click', () => row.remove());
@@ -222,6 +248,7 @@ addIngredientBtn.addEventListener('click', () => addIngredientRow());
 recipeForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = document.getElementById('recipeId').value || uid();
+  const existing = recipes.find(x => x.id === id);
 
   const ingredients = [...ingredientRows.querySelectorAll('.ingredient-row')]
     .map(row => ({
@@ -238,7 +265,7 @@ recipeForm.addEventListener('submit', async (e) => {
     id,
     name: document.getElementById('fName').value.trim(),
     category: document.getElementById('fCategory').value,
-    servings: parseInt(document.getElementById('fServings').value, 10) || 4,
+    servings: (existing && existing.servings) || 4,
     ingredients,
     steps,
     notes: document.getElementById('fNotes').value.trim(),
@@ -246,19 +273,17 @@ recipeForm.addEventListener('submit', async (e) => {
   };
 
   await RailDB.put(recipe);
-  await loadRecipes();
-  closeForm();
-  showToast('Ticket saved');
+  closeOverlay();
+  showToast('Recipe saved');
 });
 
 fDelete.addEventListener('click', async () => {
   const id = document.getElementById('recipeId').value;
   if (!id) return;
-  if (!confirm('Delete this ticket for good?')) return;
+  if (!confirm('Delete this recipe for good?')) return;
   await RailDB.remove(id);
-  await loadRecipes();
-  closeForm();
-  showToast('Ticket deleted');
+  closeOverlay();
+  showToast('Recipe deleted');
 });
 
 // ---- Service worker for offline shell caching ----

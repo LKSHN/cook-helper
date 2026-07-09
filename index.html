@@ -36,7 +36,7 @@
   <!-- Empty state -->
   <div id="emptyState" class="empty-state" hidden>
     <p class="empty-title">Nothing on this station yet.</p>
-    <p class="empty-sub">Tap + to punch in your first ticket.</p>
+    <p class="empty-sub">Tap + to punch in your first recipe.</p>
   </div>
 
   <!-- Station tabs -->
@@ -60,7 +60,7 @@
   <form id="recipeForm" class="recipe-form">
     <div class="form-header">
       <button type="button" id="formClose" class="btn-close" aria-label="Close">&times;</button>
-      <h2 id="formTitle">New Ticket</h2>
+      <h2 id="formTitle">New Recipe</h2>
       <button type="submit" class="btn-save">Save</button>
     </div>
 
@@ -77,9 +77,6 @@
       <option value="sauces">Sauces &amp; Dressings</option>
     </select>
 
-    <label class="field-label">Base servings / yield</label>
-    <input type="number" id="fServings" min="1" value="4">
-
     <label class="field-label">Ingredients</label>
     <div id="ingredientRows" class="ingredient-rows"></div>
     <button type="button" id="addIngredient" class="btn-secondary">+ Add ingredient</button>
@@ -90,12 +87,14 @@
     <label class="field-label">Allergens / notes</label>
     <input type="text" id="fNotes" placeholder="e.g. contains nuts, shellfish">
 
-    <button type="button" id="fDelete" class="btn-danger" hidden>Delete this ticket</button>
+    <button type="button" id="fDelete" class="btn-danger" hidden>Delete this recipe</button>
   </form>
 </div>
 
 <div id="toast" class="toast" hidden></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="db.js"></script>
 <script src="app.js"></script>
 </body>
