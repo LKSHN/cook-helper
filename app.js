@@ -28,7 +28,14 @@ const addPhotoBtn = document.getElementById('addPhotoBtn');
 const lightboxOverlay = document.getElementById('lightboxOverlay');
 const lightboxImg = document.getElementById('lightboxImg');
 
+// Photo state for the form currently open. originalPhotoPaths tracks what's
+// actually persisted on the recipe, so we know which Storage deletes are
+// safe to do immediately (never-saved uploads) vs. must wait until Save is
+// confirmed (removing an already-saved photo) or be undone on cancel.
 let formPhotos = [];
+let originalPhotoPaths = new Set();
+let pendingDeletePaths = [];
+let formSaved = false;
 
 const CAT_LABELS = {
   starters: 'Starters',
@@ -157,6 +164,15 @@ window.addEventListener('popstate', () => {
   if (history.state && history.state.railOverlay) {
     lightboxOverlay.hidden = true;
   } else {
+    if (!formOverlay.hidden && !formSaved) {
+      // Form is being abandoned without saving — purge any photos that
+      // were uploaded this session but never got attached to a saved
+      // recipe. Photos marked for removal (pendingDeletePaths) are left
+      // alone in Storage since the recipe doc still references them.
+      formPhotos.forEach(p => {
+        if (!originalPhotoPaths.has(p.path)) RailDB.deletePhoto(p.path);
+      });
+    }
     hideOverlays();
   }
 });
@@ -221,6 +237,9 @@ function openForm(id) {
   ingredientRows.innerHTML = '';
   fDelete.hidden = true;
   formPhotos = [];
+  originalPhotoPaths = new Set();
+  pendingDeletePaths = [];
+  formSaved = false;
 
   if (id) {
     const r = recipes.find(x => x.id === id);
@@ -232,6 +251,7 @@ function openForm(id) {
     document.getElementById('fNotes').value = r.notes || '';
     (r.ingredients || []).forEach(ing => addIngredientRow(ing.name, ing.amount, ing.unit));
     formPhotos = (r.photos || []).slice();
+    originalPhotoPaths = new Set(formPhotos.map(p => p.path));
     fDelete.hidden = false;
   } else {
     formTitle.textContent = 'New Recipe';
@@ -256,8 +276,14 @@ function renderPhotoThumbs() {
       <button type="button" aria-label="Remove photo">&times;</button>
     `;
     thumb.querySelector('button').addEventListener('click', async () => {
-      await RailDB.deletePhoto(photo.path);
       formPhotos.splice(index, 1);
+      if (originalPhotoPaths.has(photo.path)) {
+        // Already saved on the recipe — don't touch Storage until the
+        // form is actually saved, in case this edit gets cancelled.
+        pendingDeletePaths.push(photo.path);
+      } else {
+        await RailDB.deletePhoto(photo.path);
+      }
       renderPhotoThumbs();
     });
     photoThumbs.appendChild(thumb);
@@ -323,6 +349,8 @@ recipeForm.addEventListener('submit', async (e) => {
   };
 
   await RailDB.put(recipe);
+  formSaved = true;
+  await Promise.all(pendingDeletePaths.map(p => RailDB.deletePhoto(p)));
   closeOverlay();
   showToast('Recipe saved');
 });
@@ -331,8 +359,10 @@ fDelete.addEventListener('click', async () => {
   const id = document.getElementById('recipeId').value;
   if (!id) return;
   if (!confirm('Delete this recipe for good?')) return;
-  await Promise.all(formPhotos.map(p => RailDB.deletePhoto(p.path)));
+  const allPaths = new Set([...formPhotos.map(p => p.path), ...pendingDeletePaths]);
+  await Promise.all([...allPaths].map(p => RailDB.deletePhoto(p)));
   await RailDB.remove(id);
+  formSaved = true;
   closeOverlay();
   showToast('Recipe deleted');
 });
