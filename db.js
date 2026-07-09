@@ -17,6 +17,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const firestore = firebase.firestore();
 firestore.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+const storage = firebase.storage();
 
 const recipesRef = firestore.collection('recipes');
 
@@ -34,5 +35,16 @@ const RailDB = {
   },
   async remove(id) {
     await recipesRef.doc(id).delete();
+  },
+  // Uploads a photo under the recipe's folder and returns its {url, path}.
+  async uploadPhoto(recipeId, file) {
+    const path = `recipes/${recipeId}/${Date.now()}_${file.name}`;
+    const ref = storage.ref(path);
+    await ref.put(file);
+    const url = await ref.getDownloadURL();
+    return { url, path };
+  },
+  async deletePhoto(path) {
+    await storage.ref(path).delete().catch(() => {});
   }
 };

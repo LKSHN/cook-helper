@@ -21,6 +21,14 @@ const formClose = document.getElementById('formClose');
 const fDelete = document.getElementById('fDelete');
 const ingredientRows = document.getElementById('ingredientRows');
 const addIngredientBtn = document.getElementById('addIngredient');
+const photoThumbs = document.getElementById('photoThumbs');
+const fPhotoInput = document.getElementById('fPhotoInput');
+const addPhotoBtn = document.getElementById('addPhotoBtn');
+
+const lightboxOverlay = document.getElementById('lightboxOverlay');
+const lightboxImg = document.getElementById('lightboxImg');
+
+let formPhotos = [];
 
 const CAT_LABELS = {
   starters: 'Starters',
@@ -120,6 +128,7 @@ function pushOverlayState() {
 function hideOverlays() {
   ticketOverlay.hidden = true;
   formOverlay.hidden = true;
+  lightboxOverlay.hidden = true;
   currentTicketId = null;
 }
 
@@ -131,7 +140,28 @@ function closeOverlay() {
   }
 }
 
-window.addEventListener('popstate', hideOverlays);
+// The lightbox always pushes its own history entry (even on top of an
+// already-open ticket), so back-from-photo returns to the recipe instead
+// of skipping straight to the list.
+function openLightbox(url) {
+  lightboxImg.src = url;
+  history.pushState({ railOverlay: true, railLightbox: true }, '');
+  lightboxOverlay.hidden = false;
+}
+
+function closeLightbox() {
+  history.back();
+}
+
+window.addEventListener('popstate', () => {
+  if (history.state && history.state.railOverlay) {
+    lightboxOverlay.hidden = true;
+  } else {
+    hideOverlays();
+  }
+});
+
+lightboxOverlay.addEventListener('click', closeLightbox);
 
 // ---- Ticket detail view ----
 function openTicket(id) {
@@ -144,6 +174,10 @@ function openTicket(id) {
 }
 
 function renderTicket(r) {
+  const photosHtml = (r.photos || [])
+    .map(p => `<img src="${escapeHtml(p.url)}" alt="" loading="lazy">`)
+    .join('');
+
   const ingredientsHtml = (r.ingredients || []).map(ing => {
     const qty = ing.amount ? ing.amount + ' ' + escapeHtml(ing.unit || '') : '';
     return `<li><span>${escapeHtml(ing.name)}</span><span class="ingredient-qty">${qty}</span></li>`;
@@ -156,6 +190,8 @@ function renderTicket(r) {
     <div class="ticket-cat">${CAT_LABELS[r.category] || r.category}</div>
     <h2 class="ticket-name">${escapeHtml(r.name)}</h2>
     ${r.notes ? `<span class="ticket-notes">${escapeHtml(r.notes)}</span>` : ''}
+
+    ${photosHtml ? `<div class="ticket-photos">${photosHtml}</div>` : ''}
 
     <div class="ticket-section-title">Ingredients</div>
     <ul class="ingredient-list">${ingredientsHtml || '<li>No ingredients listed</li>'}</ul>
@@ -171,6 +207,9 @@ function renderTicket(r) {
     ticketOverlay.hidden = true;
     openForm(r.id);
   });
+  ticketContent.querySelectorAll('.ticket-photos img').forEach(img => {
+    img.addEventListener('click', () => openLightbox(img.src));
+  });
 }
 
 // ---- Add / Edit form ----
@@ -181,7 +220,7 @@ function openForm(id) {
   recipeForm.reset();
   ingredientRows.innerHTML = '';
   fDelete.hidden = true;
-  document.getElementById('recipeId').value = '';
+  formPhotos = [];
 
   if (id) {
     const r = recipes.find(x => x.id === id);
@@ -192,15 +231,51 @@ function openForm(id) {
     document.getElementById('fSteps').value = (r.steps || []).join('\n');
     document.getElementById('fNotes').value = r.notes || '';
     (r.ingredients || []).forEach(ing => addIngredientRow(ing.name, ing.amount, ing.unit));
+    formPhotos = (r.photos || []).slice();
     fDelete.hidden = false;
   } else {
     formTitle.textContent = 'New Recipe';
+    // Assign the id now (not at submit time) so photo uploads have a
+    // stable folder to land in even before the recipe is first saved.
+    document.getElementById('recipeId').value = uid();
     addIngredientRow();
   }
 
+  renderPhotoThumbs();
   pushOverlayState();
   formOverlay.hidden = false;
 }
+
+function renderPhotoThumbs() {
+  photoThumbs.innerHTML = '';
+  formPhotos.forEach((photo, index) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'photo-thumb';
+    thumb.innerHTML = `
+      <img src="${escapeHtml(photo.url)}" alt="">
+      <button type="button" aria-label="Remove photo">&times;</button>
+    `;
+    thumb.querySelector('button').addEventListener('click', async () => {
+      await RailDB.deletePhoto(photo.path);
+      formPhotos.splice(index, 1);
+      renderPhotoThumbs();
+    });
+    photoThumbs.appendChild(thumb);
+  });
+}
+
+addPhotoBtn.addEventListener('click', () => fPhotoInput.click());
+
+fPhotoInput.addEventListener('change', async () => {
+  const recipeId = document.getElementById('recipeId').value;
+  const files = [...fPhotoInput.files];
+  fPhotoInput.value = '';
+  for (const file of files) {
+    const photo = await RailDB.uploadPhoto(recipeId, file);
+    formPhotos.push(photo);
+    renderPhotoThumbs();
+  }
+});
 
 function addIngredientRow(name = '', amount = '', unit = '') {
   const row = document.createElement('div');
@@ -242,6 +317,7 @@ recipeForm.addEventListener('submit', async (e) => {
     category: document.getElementById('fCategory').value,
     ingredients,
     steps,
+    photos: formPhotos,
     notes: document.getElementById('fNotes').value.trim(),
     updatedAt: Date.now()
   };
@@ -255,6 +331,7 @@ fDelete.addEventListener('click', async () => {
   const id = document.getElementById('recipeId').value;
   if (!id) return;
   if (!confirm('Delete this recipe for good?')) return;
+  await Promise.all(formPhotos.map(p => RailDB.deletePhoto(p.path)));
   await RailDB.remove(id);
   closeOverlay();
   showToast('Recipe deleted');

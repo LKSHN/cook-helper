@@ -84,6 +84,11 @@
     <label class="field-label">Method</label>
     <textarea id="fSteps" rows="6" placeholder="One step per line…"></textarea>
 
+    <label class="field-label">Photos</label>
+    <div id="photoThumbs" class="photo-thumbs"></div>
+    <input type="file" id="fPhotoInput" accept="image/*" multiple hidden>
+    <button type="button" id="addPhotoBtn" class="btn-secondary">+ Add photo</button>
+
     <label class="field-label">Allergens / notes</label>
     <input type="text" id="fNotes" placeholder="e.g. contains nuts, shellfish">
 
@@ -91,10 +96,16 @@
   </form>
 </div>
 
+<!-- Photo lightbox -->
+<div id="lightboxOverlay" class="overlay lightbox-overlay" hidden>
+  <img id="lightboxImg" class="lightbox-img" alt="">
+</div>
+
 <div id="toast" class="toast" hidden></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
 <script src="db.js"></script>
 <script src="app.js"></script>
 </body>
