@@ -170,15 +170,6 @@ button, input, select, textarea{ font-family:inherit; }
   text-transform:uppercase; letter-spacing:1.5px;
   margin:26px 0 10px; border-bottom:1px dashed var(--border); padding-bottom:8px;
 }
-.servings-control{
-  display:flex; align-items:center; gap:12px; margin-top:14px;
-}
-.servings-control button{
-  width:32px; height:32px; border-radius:8px; border:1px solid var(--border);
-  background:var(--surface); color:var(--text); font-size:16px; cursor:pointer;
-}
-.servings-count{ font-family:var(--font-mono); font-size:14px; min-width:70px; text-align:center; }
-
 .ingredient-list{ list-style:none; padding:0; margin:0; }
 .ingredient-list li{
   display:flex; justify-content:space-between; gap:12px;

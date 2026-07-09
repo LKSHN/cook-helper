@@ -77,7 +77,7 @@ function render() {
         <h3 class="card-name">${escapeHtml(r.name)}</h3>
         <span class="card-cat">${CAT_LABELS[r.category] || r.category}</span>
       </div>
-      <div class="card-meta">${(r.ingredients || []).length} ingredients &middot; serves ${r.servings || '—'}</div>
+      <div class="card-meta">${(r.ingredients || []).length} ingredients</div>
       ${r.notes ? `<span class="card-notes">${escapeHtml(r.notes)}</span>` : ''}
     `;
     card.addEventListener('click', () => openTicket(r.id));
@@ -138,18 +138,15 @@ function openTicket(id) {
   const r = recipes.find(x => x.id === id);
   if (!r) return;
   currentTicketId = id;
-  renderTicket(r, r.servings || 4);
+  renderTicket(r);
   pushOverlayState();
   ticketOverlay.hidden = false;
 }
 
-function renderTicket(r, servings) {
-  const base = r.servings || 4;
-  const factor = servings / base;
-
+function renderTicket(r) {
   const ingredientsHtml = (r.ingredients || []).map(ing => {
-    const scaled = ing.amount ? scaleAmount(ing.amount, factor) : '';
-    return `<li><span>${escapeHtml(ing.name)}</span><span class="ingredient-qty">${scaled ? scaled + ' ' + escapeHtml(ing.unit || '') : ''}</span></li>`;
+    const qty = ing.amount ? ing.amount + ' ' + escapeHtml(ing.unit || '') : '';
+    return `<li><span>${escapeHtml(ing.name)}</span><span class="ingredient-qty">${qty}</span></li>`;
   }).join('');
 
   const stepsHtml = (r.steps || []).map(s => `<li>${escapeHtml(s)}</li>`).join('');
@@ -159,12 +156,6 @@ function renderTicket(r, servings) {
     <div class="ticket-cat">${CAT_LABELS[r.category] || r.category}</div>
     <h2 class="ticket-name">${escapeHtml(r.name)}</h2>
     ${r.notes ? `<span class="ticket-notes">${escapeHtml(r.notes)}</span>` : ''}
-
-    <div class="servings-control">
-      <button id="servDown">&minus;</button>
-      <span class="servings-count" id="servCount">${servings} serving${servings == 1 ? '' : 's'}</span>
-      <button id="servUp">+</button>
-    </div>
 
     <div class="ticket-section-title">Ingredients</div>
     <ul class="ingredient-list">${ingredientsHtml || '<li>No ingredients listed</li>'}</ul>
@@ -180,21 +171,6 @@ function renderTicket(r, servings) {
     ticketOverlay.hidden = true;
     openForm(r.id);
   });
-  document.getElementById('servDown').addEventListener('click', () => {
-    const next = Math.max(1, servings - 1);
-    renderTicket(r, next);
-  });
-  document.getElementById('servUp').addEventListener('click', () => {
-    renderTicket(r, servings + 1);
-  });
-}
-
-function scaleAmount(amount, factor) {
-  const n = parseFloat(amount);
-  if (isNaN(n)) return amount;
-  const scaled = n * factor;
-  // round sensibly: 2 decimals max, trim trailing zeros
-  return (Math.round(scaled * 100) / 100).toString();
 }
 
 // ---- Add / Edit form ----
@@ -248,7 +224,6 @@ addIngredientBtn.addEventListener('click', () => addIngredientRow());
 recipeForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = document.getElementById('recipeId').value || uid();
-  const existing = recipes.find(x => x.id === id);
 
   const ingredients = [...ingredientRows.querySelectorAll('.ingredient-row')]
     .map(row => ({
@@ -265,7 +240,6 @@ recipeForm.addEventListener('submit', async (e) => {
     id,
     name: document.getElementById('fName').value.trim(),
     category: document.getElementById('fCategory').value,
-    servings: (existing && existing.servings) || 4,
     ingredients,
     steps,
     notes: document.getElementById('fNotes').value.trim(),
