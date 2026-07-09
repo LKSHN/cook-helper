@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#15171A">
+<title>The Rail</title>
+<meta name="description" content="Offline recipe & dressing reference for your menu">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="The Rail">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Header -->
+  <header class="rail-header">
+    <div class="header-top">
+      <h1 class="brand">THE RAIL</h1>
+      <button id="addBtn" class="btn-add" aria-label="Add recipe">+</button>
+    </div>
+    <div class="search-wrap">
+      <input id="searchInput" type="text" placeholder="Find a dish, sauce, ingredient…" autocomplete="off">
+    </div>
+  </header>
+
+  <!-- Recipe list -->
+  <main id="cardList" class="card-list"></main>
+
+  <!-- Empty state -->
+  <div id="emptyState" class="empty-state" hidden>
+    <p class="empty-title">Nothing on this station yet.</p>
+    <p class="empty-sub">Tap + to punch in your first ticket.</p>
+  </div>
+
+  <!-- Station tabs -->
+  <nav class="station-tabs" id="stationTabs">
+    <button class="tab active" data-cat="all">All</button>
+    <button class="tab" data-cat="starters">Starters</button>
+    <button class="tab" data-cat="mains">Mains</button>
+    <button class="tab" data-cat="desserts">Desserts</button>
+    <button class="tab" data-cat="sauces">Sauces &amp; Dressings</button>
+  </nav>
+
+</div>
+
+<!-- Recipe detail / ticket view -->
+<div id="ticketOverlay" class="overlay" hidden>
+  <div class="ticket" id="ticketContent"></div>
+</div>
+
+<!-- Add/Edit form -->
+<div id="formOverlay" class="overlay" hidden>
+  <form id="recipeForm" class="recipe-form">
+    <div class="form-header">
+      <button type="button" id="formClose" class="btn-close" aria-label="Close">&times;</button>
+      <h2 id="formTitle">New Ticket</h2>
+      <button type="submit" class="btn-save">Save</button>
+    </div>
+
+    <input type="hidden" id="recipeId">
+
+    <label class="field-label">Dish / item name</label>
+    <input type="text" id="fName" required placeholder="e.g. Charred Octopus">
+
+    <label class="field-label">Station</label>
+    <select id="fCategory">
+      <option value="starters">Starters</option>
+      <option value="mains">Mains</option>
+      <option value="desserts">Desserts</option>
+      <option value="sauces">Sauces &amp; Dressings</option>
+    </select>
+
+    <label class="field-label">Base servings / yield</label>
+    <input type="number" id="fServings" min="1" value="4">
+
+    <label class="field-label">Ingredients</label>
+    <div id="ingredientRows" class="ingredient-rows"></div>
+    <button type="button" id="addIngredient" class="btn-secondary">+ Add ingredient</button>
+
+    <label class="field-label">Method</label>
+    <textarea id="fSteps" rows="6" placeholder="One step per line…"></textarea>
+
+    <label class="field-label">Allergens / notes</label>
+    <input type="text" id="fNotes" placeholder="e.g. contains nuts, shellfish">
+
+    <button type="button" id="fDelete" class="btn-danger" hidden>Delete this ticket</button>
+  </form>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="db.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

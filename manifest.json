@@ -1,0 +1,16 @@
+{
+  "name": "The Rail — Recipe & Dressing Book",
+  "short_name": "The Rail",
+  "description": "Offline recipe and dressing reference for your menu",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#15171A",
+  "theme_color": "#15171A",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
