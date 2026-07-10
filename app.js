@@ -50,15 +50,26 @@ function uid() {
   return 'r_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-function showToast(msg) {
+function showToast(msg, duration = 2000) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.hidden = false;
   t.style.animation = 'none';
   void t.offsetWidth;
   t.style.animation = '';
-  setTimeout(() => { t.hidden = true; }, 2000);
+  clearTimeout(showToast._hideTimer);
+  showToast._hideTimer = setTimeout(() => { t.hidden = true; }, duration);
 }
+
+// Surfaces otherwise-silent JS errors as a toast — useful for diagnosing
+// issues on devices we can't attach devtools to.
+window.addEventListener('error', (e) => {
+  showToast('Error: ' + e.message, 6000);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const reason = e.reason && e.reason.message ? e.reason.message : String(e.reason);
+  showToast('Error: ' + reason, 6000);
+});
 
 function loadRecipes() {
   RailDB.onChange((data) => {
