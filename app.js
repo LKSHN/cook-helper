@@ -303,8 +303,11 @@ function renderPhotoThumbs() {
 
 addPhotoBtn.addEventListener('click', () => fPhotoInput.click());
 
-fPhotoInput.addEventListener('change', async () => {
-  showToast('Photo input fired: ' + fPhotoInput.files.length + ' file(s)', 6000);
+// TEMPORARY diagnostic: alert() can't be hidden by any CSS/rendering issue,
+// unlike the toast. Remove once we've confirmed the event actually fires
+// on the affected device.
+async function handlePhotoSelect() {
+  alert('Photo input fired: ' + fPhotoInput.files.length + ' file(s)');
   const recipeId = document.getElementById('recipeId').value;
   const files = [...fPhotoInput.files];
   fPhotoInput.value = '';
@@ -319,7 +322,14 @@ fPhotoInput.addEventListener('change', async () => {
       showToast('Photo upload failed: ' + e.message);
     }
   }
-});
+}
+
+// Listening on both events: some mobile browsers/webviews are inconsistent
+// about which one fires for file inputs. Clearing .value after reading
+// files means if both fire for the same selection, the second run just
+// sees an empty FileList and no-ops.
+fPhotoInput.addEventListener('change', handlePhotoSelect);
+fPhotoInput.addEventListener('input', handlePhotoSelect);
 
 function addIngredientRow(name = '', amount = '', unit = '') {
   const row = document.createElement('div');
