@@ -239,6 +239,13 @@ button, input, select, textarea{ font-family:inherit; }
 }
 
 /* Photos */
+/* Keeps the file input in the layout (unlike display:none) — some mobile
+   browsers fail to deliver the change/input event to a fully hidden
+   file input after the picker closes. */
+.visually-hidden{
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+}
 .photo-thumbs{ display:flex; flex-wrap:wrap; gap:8px; }
 .photo-thumb{
   position:relative; width:72px; height:72px;
