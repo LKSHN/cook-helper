@@ -304,6 +304,7 @@ function renderPhotoThumbs() {
 addPhotoBtn.addEventListener('click', () => fPhotoInput.click());
 
 fPhotoInput.addEventListener('change', async () => {
+  showToast('Photo input fired: ' + fPhotoInput.files.length + ' file(s)', 6000);
   const recipeId = document.getElementById('recipeId').value;
   const files = [...fPhotoInput.files];
   fPhotoInput.value = '';
