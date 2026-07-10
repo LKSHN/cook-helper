@@ -297,9 +297,15 @@ fPhotoInput.addEventListener('change', async () => {
   const files = [...fPhotoInput.files];
   fPhotoInput.value = '';
   for (const file of files) {
-    const photo = await RailDB.uploadPhoto(recipeId, file);
-    formPhotos.push(photo);
-    renderPhotoThumbs();
+    try {
+      showToast('Uploading photo…');
+      const photo = await RailDB.uploadPhoto(recipeId, file);
+      formPhotos.push(photo);
+      renderPhotoThumbs();
+      showToast('Photo added');
+    } catch (e) {
+      showToast('Photo upload failed: ' + e.message);
+    }
   }
 });
 
