@@ -23,7 +23,6 @@ const ingredientRows = document.getElementById('ingredientRows');
 const addIngredientBtn = document.getElementById('addIngredient');
 const photoThumbs = document.getElementById('photoThumbs');
 const fPhotoInput = document.getElementById('fPhotoInput');
-const addPhotoBtn = document.getElementById('addPhotoBtn');
 
 const lightboxOverlay = document.getElementById('lightboxOverlay');
 const lightboxImg = document.getElementById('lightboxImg');
@@ -300,8 +299,6 @@ function renderPhotoThumbs() {
     photoThumbs.appendChild(thumb);
   });
 }
-
-addPhotoBtn.addEventListener('click', () => fPhotoInput.click());
 
 // TEMPORARY diagnostic: alert() can't be hidden by any CSS/rendering issue,
 // unlike the toast. Remove once we've confirmed the event actually fires

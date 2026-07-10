@@ -233,7 +233,7 @@ button, input, select, textarea{ font-family:inherit; }
 }
 
 .btn-secondary{
-  margin-top:10px; align-self:flex-start;
+  display:inline-block; margin-top:10px; align-self:flex-start;
   background:none; border:1px dashed var(--border); color:var(--accent);
   padding:8px 14px; border-radius:8px; font-size:13px; cursor:pointer;
 }
