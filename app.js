@@ -21,6 +21,8 @@ const formClose = document.getElementById('formClose');
 const fDelete = document.getElementById('fDelete');
 const ingredientRows = document.getElementById('ingredientRows');
 const addIngredientBtn = document.getElementById('addIngredient');
+const stepRows = document.getElementById('stepRows');
+const addStepBtn = document.getElementById('addStep');
 const photoThumbs = document.getElementById('photoThumbs');
 const fPhotoInput = document.getElementById('fPhotoInput');
 
@@ -94,16 +96,20 @@ function render() {
   emptyState.hidden = list.length > 0;
 
   list.forEach(r => {
+    const thumbUrl = r.photos && r.photos[0] ? r.photos[0].url : null;
     const card = document.createElement('div');
     card.className = 'recipe-card';
     card.tabIndex = 0;
     card.innerHTML = `
-      <div class="card-top">
-        <h3 class="card-name">${escapeHtml(r.name)}</h3>
-        <span class="card-cat">${CAT_LABELS[r.category] || r.category}</span>
+      ${thumbUrl ? `<img class="card-thumb" src="${escapeHtml(thumbUrl)}" alt="" loading="lazy">` : ''}
+      <div class="card-body">
+        <div class="card-top">
+          <h3 class="card-name">${escapeHtml(r.name)}</h3>
+          <span class="card-cat">${CAT_LABELS[r.category] || r.category}</span>
+        </div>
+        <div class="card-meta">${(r.ingredients || []).length} ingredients</div>
+        ${r.notes ? `<span class="card-notes">${escapeHtml(r.notes)}</span>` : ''}
       </div>
-      <div class="card-meta">${(r.ingredients || []).length} ingredients</div>
-      ${r.notes ? `<span class="card-notes">${escapeHtml(r.notes)}</span>` : ''}
     `;
     card.addEventListener('click', () => openTicket(r.id));
     cardList.appendChild(card);
@@ -245,6 +251,7 @@ formClose.addEventListener('click', closeOverlay);
 function openForm(id) {
   recipeForm.reset();
   ingredientRows.innerHTML = '';
+  stepRows.innerHTML = '';
   fDelete.hidden = true;
   formPhotos = [];
   originalPhotoPaths = new Set();
@@ -257,9 +264,9 @@ function openForm(id) {
     document.getElementById('recipeId').value = r.id;
     document.getElementById('fName').value = r.name;
     document.getElementById('fCategory').value = r.category;
-    document.getElementById('fSteps').value = (r.steps || []).join('\n');
     document.getElementById('fNotes').value = r.notes || '';
     (r.ingredients || []).forEach(ing => addIngredientRow(ing.name, ing.amount, ing.unit));
+    (r.steps || []).forEach(step => addStepRow(step));
     formPhotos = (r.photos || []).slice();
     originalPhotoPaths = new Set(formPhotos.map(p => p.path));
     fDelete.hidden = false;
@@ -269,6 +276,7 @@ function openForm(id) {
     // stable folder to land in even before the recipe is first saved.
     document.getElementById('recipeId').value = uid();
     addIngredientRow();
+    addStepRow();
   }
 
   renderPhotoThumbs();
@@ -283,9 +291,21 @@ function renderPhotoThumbs() {
     thumb.className = 'photo-thumb';
     thumb.innerHTML = `
       <img src="${escapeHtml(photo.url)}" alt="">
-      <button type="button" aria-label="Remove photo">&times;</button>
+      <button type="button" class="thumb-remove" aria-label="Remove photo">&times;</button>
+      <div class="thumb-reorder">
+        <button type="button" class="thumb-left" aria-label="Move earlier" ${index === 0 ? 'disabled' : ''}>&larr;</button>
+        <button type="button" class="thumb-right" aria-label="Move later" ${index === formPhotos.length - 1 ? 'disabled' : ''}>&rarr;</button>
+      </div>
     `;
-    thumb.querySelector('button').addEventListener('click', async () => {
+    thumb.querySelector('.thumb-left').addEventListener('click', () => {
+      [formPhotos[index - 1], formPhotos[index]] = [formPhotos[index], formPhotos[index - 1]];
+      renderPhotoThumbs();
+    });
+    thumb.querySelector('.thumb-right').addEventListener('click', () => {
+      [formPhotos[index + 1], formPhotos[index]] = [formPhotos[index], formPhotos[index + 1]];
+      renderPhotoThumbs();
+    });
+    thumb.querySelector('.thumb-remove').addEventListener('click', async () => {
       formPhotos.splice(index, 1);
       if (originalPhotoPaths.has(photo.path)) {
         // Already saved on the recipe — don't touch Storage until the
@@ -300,11 +320,13 @@ function renderPhotoThumbs() {
   });
 }
 
-// TEMPORARY diagnostic: alert() can't be hidden by any CSS/rendering issue,
-// unlike the toast. Remove once we've confirmed the event actually fires
-// on the affected device.
+// KNOWN ISSUE: photo upload doesn't work on at least one Android phone —
+// the picker opens, but no change/input event (nor even a raw alert())
+// ever fires afterward. Tried: display:none vs visually-hidden input,
+// JS .click() vs native <label for>, listening on both change and input.
+// None of it reproduced or fixed it. Uploading from a PC works fine in
+// the meantime. Revisit with a real device/remote-debugging session.
 async function handlePhotoSelect() {
-  alert('Photo input fired: ' + fPhotoInput.files.length + ' file(s)');
   const recipeId = document.getElementById('recipeId').value;
   const files = [...fPhotoInput.files];
   fPhotoInput.value = '';
@@ -328,6 +350,31 @@ async function handlePhotoSelect() {
 fPhotoInput.addEventListener('change', handlePhotoSelect);
 fPhotoInput.addEventListener('input', handlePhotoSelect);
 
+// Ingredients and steps are read straight from DOM order at submit time,
+// so reordering just moves the row element itself — no separate array to
+// keep in sync.
+function moveRow(row, direction) {
+  if (direction === 'up' && row.previousElementSibling) {
+    row.parentNode.insertBefore(row, row.previousElementSibling);
+  } else if (direction === 'down' && row.nextElementSibling) {
+    row.parentNode.insertBefore(row.nextElementSibling, row);
+  }
+}
+
+function reorderButtonsHtml() {
+  return `
+    <div class="reorder-btns">
+      <button type="button" class="row-up" aria-label="Move up">&uarr;</button>
+      <button type="button" class="row-down" aria-label="Move down">&darr;</button>
+    </div>
+  `;
+}
+
+function wireReorderButtons(row) {
+  row.querySelector('.row-up').addEventListener('click', () => moveRow(row, 'up'));
+  row.querySelector('.row-down').addEventListener('click', () => moveRow(row, 'down'));
+}
+
 function addIngredientRow(name = '', amount = '', unit = '') {
   const row = document.createElement('div');
   row.className = 'ingredient-row';
@@ -339,13 +386,30 @@ function addIngredientRow(name = '', amount = '', unit = '') {
     <input type="text" placeholder="Ingredient" class="ing-name" value="${escapeHtml(name)}">
     <input type="text" placeholder="Qty" class="ing-amount" value="${escapeHtml(amount)}">
     <select class="ing-unit">${unitOptions}</select>
-    <button type="button" aria-label="Remove ingredient">&times;</button>
+    ${reorderButtonsHtml()}
+    <button type="button" class="row-remove" aria-label="Remove ingredient">&times;</button>
   `;
-  row.querySelector('button').addEventListener('click', () => row.remove());
+  wireReorderButtons(row);
+  row.querySelector('.row-remove').addEventListener('click', () => row.remove());
   ingredientRows.appendChild(row);
 }
 
 addIngredientBtn.addEventListener('click', () => addIngredientRow());
+
+function addStepRow(text = '') {
+  const row = document.createElement('div');
+  row.className = 'step-row';
+  row.innerHTML = `
+    <input type="text" placeholder="Step" class="step-text" value="${escapeHtml(text)}">
+    ${reorderButtonsHtml()}
+    <button type="button" class="row-remove" aria-label="Remove step">&times;</button>
+  `;
+  wireReorderButtons(row);
+  row.querySelector('.row-remove').addEventListener('click', () => row.remove());
+  stepRows.appendChild(row);
+}
+
+addStepBtn.addEventListener('click', () => addStepRow());
 
 recipeForm.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -359,8 +423,9 @@ recipeForm.addEventListener('submit', async (e) => {
     }))
     .filter(ing => ing.name);
 
-  const steps = document.getElementById('fSteps').value
-    .split('\n').map(s => s.trim()).filter(Boolean);
+  const steps = [...stepRows.querySelectorAll('.step-row .step-text')]
+    .map(input => input.value.trim())
+    .filter(Boolean);
 
   const recipe = {
     id,

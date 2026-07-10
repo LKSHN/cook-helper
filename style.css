@@ -77,8 +77,14 @@ button, input, select, textarea{ font-family:inherit; }
   border-radius:12px; padding:14px 16px;
   cursor:pointer; position:relative;
   transition:border-color .15s ease;
+  display:flex; gap:12px; align-items:center;
 }
 .recipe-card:active{ border-color:var(--accent); }
+.card-thumb{
+  flex:0 0 auto; width:56px; height:56px; object-fit:cover;
+  border-radius:8px; border:1px solid var(--border);
+}
+.card-body{ flex:1; min-width:0; }
 
 .card-top{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
 .card-name{
@@ -222,15 +228,23 @@ button, input, select, textarea{ font-family:inherit; }
   outline:2px solid var(--accent); outline-offset:1px;
 }
 
-.ingredient-rows{ display:flex; flex-direction:column; gap:8px; }
-.ingredient-row{ display:flex; gap:8px; }
+.ingredient-rows, .step-rows{ display:flex; flex-direction:column; gap:8px; }
+.ingredient-row, .step-row{ display:flex; gap:8px; align-items:center; }
 .ingredient-row .ing-name{ flex:2; }
 .ingredient-row .ing-amount{ flex:1; width:0; }
 .ingredient-row .ing-unit{ flex:1; width:0; }
-.ingredient-row button{
+.step-row .step-text{ flex:1; }
+.row-remove{
   flex:0 0 auto; background:var(--surface); border:1px solid var(--border);
-  color:var(--danger); border-radius:8px; width:38px; font-size:16px; cursor:pointer;
+  color:var(--danger); border-radius:8px; width:38px; height:38px; font-size:16px; cursor:pointer;
 }
+.reorder-btns{ flex:0 0 auto; display:flex; flex-direction:column; gap:2px; }
+.reorder-btns button{
+  width:24px; height:18px; line-height:1; padding:0;
+  background:var(--surface); border:1px solid var(--border);
+  color:var(--text-dim); border-radius:5px; font-size:11px; cursor:pointer;
+}
+.reorder-btns button:disabled{ opacity:0.3; cursor:default; }
 
 .btn-secondary{
   display:inline-block; margin-top:10px; align-self:flex-start;
@@ -252,11 +266,20 @@ button, input, select, textarea{ font-family:inherit; }
   border-radius:8px; overflow:hidden; border:1px solid var(--border);
 }
 .photo-thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
-.photo-thumb button{
+.thumb-remove{
   position:absolute; top:2px; right:2px; width:20px; height:20px;
   border-radius:50%; background:rgba(0,0,0,0.6); color:#fff;
   border:none; font-size:12px; line-height:1; cursor:pointer;
 }
+.thumb-reorder{
+  position:absolute; bottom:2px; left:2px; right:2px;
+  display:flex; justify-content:space-between;
+}
+.thumb-reorder button{
+  width:20px; height:18px; border-radius:5px; background:rgba(0,0,0,0.6);
+  color:#fff; border:none; font-size:11px; line-height:1; cursor:pointer;
+}
+.thumb-reorder button:disabled{ opacity:0.3; cursor:default; }
 .ticket-photos{
   display:flex; gap:8px; overflow-x:auto; margin:14px 0;
   -webkit-overflow-scrolling:touch;
