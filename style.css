@@ -133,7 +133,7 @@ button, input, select, textarea{ font-family:inherit; }
   border-top:1px solid transparent;
 }
 .card-accordion.open{ grid-template-rows:1fr; border-top-color:var(--border); }
-.card-accordion-inner{ overflow:hidden; }
+.card-accordion-inner{ overflow:hidden; min-height:0; }
 .card-accordion .ingredient-list{ padding:14px 16px 4px; margin:0; }
 .card-view-full{
   display:block; width:100%; text-align:center;
