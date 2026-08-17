@@ -4,6 +4,8 @@ let recipes = [];
 let activeCategory = 'all';
 let searchTerm = '';
 let currentTicketId = null;
+let expandedCardId = null;
+let openCardMenuId = null;
 
 const cardList = document.getElementById('cardList');
 const emptyState = document.getElementById('emptyState');
@@ -97,23 +99,101 @@ function render() {
 
   list.forEach(r => {
     const thumbUrl = r.photos && r.photos[0] ? r.photos[0].url : null;
+    const ingredientsHtml = (r.ingredients || []).map(ing => {
+      const qty = ing.amount ? ing.amount + ' ' + escapeHtml(ing.unit || '') : '';
+      return `<li><span>${escapeHtml(ing.name)}</span><span class="ingredient-qty">${qty}</span></li>`;
+    }).join('');
+
     const card = document.createElement('div');
     card.className = 'recipe-card';
-    card.tabIndex = 0;
     card.innerHTML = `
-      ${thumbUrl ? `<img class="card-thumb" src="${escapeHtml(thumbUrl)}" alt="" loading="lazy">` : ''}
-      <div class="card-body">
-        <div class="card-top">
-          <h3 class="card-name">${escapeHtml(r.name)}</h3>
-          <span class="card-cat">${CAT_LABELS[r.category] || r.category}</span>
+      <div class="card-main" tabindex="0">
+        ${thumbUrl ? `<img class="card-thumb" src="${escapeHtml(thumbUrl)}" alt="" loading="lazy">` : ''}
+        <div class="card-body">
+          <div class="card-top">
+            <h3 class="card-name">${escapeHtml(r.name)}</h3>
+            <span class="card-cat">${CAT_LABELS[r.category] || r.category}</span>
+          </div>
+          <div class="card-meta">${(r.ingredients || []).length} ingredients</div>
+          ${r.notes ? `<span class="card-notes">${escapeHtml(r.notes)}</span>` : ''}
         </div>
-        <div class="card-meta">${(r.ingredients || []).length} ingredients</div>
-        ${r.notes ? `<span class="card-notes">${escapeHtml(r.notes)}</span>` : ''}
+        <div class="card-menu-wrap">
+          <button type="button" class="card-menu-btn" aria-label="Recipe actions">&#8942;</button>
+          <div class="card-menu" hidden>
+            <button type="button" class="card-menu-edit">Edit</button>
+            <button type="button" class="card-menu-delete">Delete</button>
+          </div>
+        </div>
+      </div>
+      <div class="card-accordion">
+        <div class="card-accordion-inner">
+          <ul class="ingredient-list">${ingredientsHtml || '<li>No ingredients listed</li>'}</ul>
+          <button type="button" class="card-view-full">View full recipe &rarr;</button>
+        </div>
       </div>
     `;
-    card.addEventListener('click', () => openTicket(r.id));
+
+    card.querySelector('.card-main').addEventListener('click', (e) => {
+      if (e.target.closest('.card-menu-wrap')) return;
+      toggleAccordion(card, r.id);
+    });
+    card.querySelector('.card-menu-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleCardMenu(card, r.id);
+    });
+    card.querySelector('.card-menu-edit').addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeCardMenu();
+      openForm(r.id);
+    });
+    card.querySelector('.card-menu-delete').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      closeCardMenu();
+      await deleteRecipeById(r.id, r.photos);
+    });
+    card.querySelector('.card-view-full').addEventListener('click', (e) => {
+      e.stopPropagation();
+      openTicket(r.id);
+    });
+
+    if (r.id === expandedCardId) card.querySelector('.card-accordion').classList.add('open');
+    if (r.id === openCardMenuId) card.querySelector('.card-menu').hidden = false;
+
     cardList.appendChild(card);
   });
+}
+
+function toggleAccordion(card, id) {
+  const wasOpen = expandedCardId === id;
+  cardList.querySelectorAll('.card-accordion.open').forEach(el => el.classList.remove('open'));
+  expandedCardId = wasOpen ? null : id;
+  if (!wasOpen) card.querySelector('.card-accordion').classList.add('open');
+}
+
+function toggleCardMenu(card, id) {
+  const wasOpen = openCardMenuId === id;
+  closeCardMenu();
+  if (!wasOpen) {
+    card.querySelector('.card-menu').hidden = false;
+    openCardMenuId = id;
+  }
+}
+
+function closeCardMenu() {
+  cardList.querySelectorAll('.card-menu').forEach(el => { el.hidden = true; });
+  openCardMenuId = null;
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.card-menu-wrap')) closeCardMenu();
+});
+
+async function deleteRecipeById(id, photos) {
+  if (!confirm('Delete this recipe for good?')) return false;
+  await Promise.all((photos || []).map(p => RailDB.deletePhoto(p.path)));
+  await RailDB.remove(id);
+  showToast('Recipe deleted');
+  return true;
 }
 
 function escapeHtml(str) {
@@ -448,13 +528,12 @@ recipeForm.addEventListener('submit', async (e) => {
 fDelete.addEventListener('click', async () => {
   const id = document.getElementById('recipeId').value;
   if (!id) return;
-  if (!confirm('Delete this recipe for good?')) return;
-  const allPaths = new Set([...formPhotos.map(p => p.path), ...pendingDeletePaths]);
-  await Promise.all([...allPaths].map(p => RailDB.deletePhoto(p)));
-  await RailDB.remove(id);
-  formSaved = true;
-  closeOverlay();
-  showToast('Recipe deleted');
+  const allPaths = [...new Set([...formPhotos.map(p => p.path), ...pendingDeletePaths])];
+  const deleted = await deleteRecipeById(id, allPaths.map(path => ({ path })));
+  if (deleted) {
+    formSaved = true;
+    closeOverlay();
+  }
 });
 
 // ---- Service worker for offline shell caching ----
