@@ -156,8 +156,8 @@ function render() {
       openTicket(r.id);
     });
 
-    if (r.id === expandedCardId) card.querySelector('.card-accordion').classList.add('open');
     if (r.id === openCardMenuId) card.querySelector('.card-menu').hidden = false;
+    if (r.id === expandedCardId) card.querySelector('.card-accordion').classList.add('open');
 
     cardList.appendChild(card);
   });

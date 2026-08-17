@@ -126,14 +126,13 @@ button, input, select, textarea{ font-family:inherit; }
 .card-menu button:active{ background:var(--surface); }
 .card-menu-delete{ color:var(--danger); }
 
-/* Card accordion — rolls open to show ingredients without leaving the list */
-.card-accordion{
-  display:grid; grid-template-rows:0fr;
-  transition:grid-template-rows .25s ease;
-  border-top:1px solid transparent;
-}
-.card-accordion.open{ grid-template-rows:1fr; border-top-color:var(--border); }
-.card-accordion-inner{ overflow:hidden; min-height:0; }
+/* Card accordion — shows ingredients without leaving the list.
+   Deliberately no open/close animation: two different height-transition
+   techniques (grid-template-rows fr, then JS-measured max-height) both
+   produced unreliable rendering in real-world testing, so this trades the
+   animated "roll down" for something that just works everywhere. */
+.card-accordion{ display:none; border-top:1px solid var(--border); }
+.card-accordion.open{ display:block; }
 .card-accordion .ingredient-list{ padding:14px 16px 4px; margin:0; }
 .card-view-full{
   display:block; width:100%; text-align:center;
