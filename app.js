@@ -543,4 +543,12 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// Shows which cached build is actually active on this device — handy for
+// confirming whether a device has picked up a new deploy yet.
+if ('caches' in window) {
+  caches.keys().then(keys => {
+    document.getElementById('buildVersion').textContent = keys.join(', ') || 'no cache yet';
+  });
+}
+
 loadRecipes();
