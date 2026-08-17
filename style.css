@@ -81,11 +81,14 @@ button, input, select, textarea{ font-family:inherit; }
   border-radius:12px; position:relative; overflow:hidden;
   transition:border-color .15s ease;
 }
-.recipe-card:has(.card-accordion.open){ border-color:var(--accent); }
+.recipe-card[open]{ border-color:var(--accent); }
 .card-main{
   display:flex; gap:12px; align-items:center;
   padding:14px 16px; cursor:pointer;
+  list-style:none; /* remove native <summary> disclosure marker */
 }
+.card-main::-webkit-details-marker{ display:none; }
+.card-main::marker{ content:''; }
 .card-thumb{
   flex:0 0 auto; width:56px; height:56px; object-fit:cover;
   border-radius:8px; border:1px solid var(--border);
@@ -130,14 +133,10 @@ button, input, select, textarea{ font-family:inherit; }
 .card-menu button:active{ background:var(--surface); }
 .card-menu-delete{ color:var(--danger); }
 
-/* Card accordion — shows ingredients without leaving the list.
-   Deliberately no open/close animation: two different height-transition
-   techniques (grid-template-rows fr, then JS-measured max-height) both
-   produced unreliable rendering in real-world testing, so this trades the
-   animated "roll down" for something that just works everywhere. */
-.card-accordion{ display:none; border-top:1px solid var(--border); }
-.card-accordion.open{ display:block; }
-.card-accordion .ingredient-list{ padding:14px 16px 4px; margin:0; }
+/* Card accordion content — shown/hidden natively by <details>, so there's
+   no open/close state or animation to manage here at all. */
+.card-accordion-inner{ border-top:1px solid var(--border); }
+.card-accordion-inner .ingredient-list{ padding:14px 16px 4px; margin:0; }
 .card-view-full{
   display:block; width:100%; text-align:center;
   background:none; border:none; color:var(--accent);

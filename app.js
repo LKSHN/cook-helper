@@ -104,10 +104,14 @@ function render() {
       return `<li><span>${escapeHtml(ing.name)}</span><span class="ingredient-qty">${qty}</span></li>`;
     }).join('');
 
-    const card = document.createElement('div');
+    // Native <details>/<summary> instead of a hand-rolled JS/CSS toggle:
+    // the browser owns the open/close state and layout reflow, which
+    // sidesteps a class of real-world rendering bugs a custom height
+    // toggle kept hitting on at least one device.
+    const card = document.createElement('details');
     card.className = 'recipe-card';
     card.innerHTML = `
-      <div class="card-main" tabindex="0">
+      <summary class="card-main">
         ${thumbUrl ? `<img class="card-thumb" src="${escapeHtml(thumbUrl)}" alt="" loading="lazy">` : ''}
         <div class="card-body">
           <div class="card-top">
@@ -124,29 +128,36 @@ function render() {
             <button type="button" class="card-menu-delete">Delete</button>
           </div>
         </div>
-      </div>
-      <div class="card-accordion">
-        <div class="card-accordion-inner">
-          <ul class="ingredient-list">${ingredientsHtml || '<li>No ingredients listed</li>'}</ul>
-          <button type="button" class="card-view-full">View full recipe &rarr;</button>
-        </div>
+      </summary>
+      <div class="card-accordion-inner">
+        <ul class="ingredient-list">${ingredientsHtml || '<li>No ingredients listed</li>'}</ul>
+        <button type="button" class="card-view-full">View full recipe &rarr;</button>
       </div>
     `;
 
-    card.querySelector('.card-main').addEventListener('click', (e) => {
-      if (e.target.closest('.card-menu-wrap')) return;
-      toggleAccordion(card, r.id);
+    card.addEventListener('toggle', () => {
+      if (card.open) {
+        cardList.querySelectorAll('details.recipe-card[open]').forEach(other => {
+          if (other !== card) other.open = false;
+        });
+        expandedCardId = r.id;
+      } else if (expandedCardId === r.id) {
+        expandedCardId = null;
+      }
     });
     card.querySelector('.card-menu-btn').addEventListener('click', (e) => {
+      e.preventDefault(); // don't let the native <summary> toggle fire
       e.stopPropagation();
       toggleCardMenu(card, r.id);
     });
     card.querySelector('.card-menu-edit').addEventListener('click', (e) => {
+      e.preventDefault();
       e.stopPropagation();
       closeCardMenu();
       openForm(r.id);
     });
     card.querySelector('.card-menu-delete').addEventListener('click', async (e) => {
+      e.preventDefault();
       e.stopPropagation();
       closeCardMenu();
       await deleteRecipeById(r.id, r.photos);
@@ -157,17 +168,10 @@ function render() {
     });
 
     if (r.id === openCardMenuId) card.querySelector('.card-menu').hidden = false;
-    if (r.id === expandedCardId) card.querySelector('.card-accordion').classList.add('open');
+    if (r.id === expandedCardId) card.open = true;
 
     cardList.appendChild(card);
   });
-}
-
-function toggleAccordion(card, id) {
-  const wasOpen = expandedCardId === id;
-  cardList.querySelectorAll('.card-accordion.open').forEach(el => el.classList.remove('open'));
-  expandedCardId = wasOpen ? null : id;
-  if (!wasOpen) card.querySelector('.card-accordion').classList.add('open');
 }
 
 function toggleCardMenu(card, id) {
