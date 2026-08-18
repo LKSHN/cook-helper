@@ -182,18 +182,13 @@ button, input, select, textarea{ font-family:inherit; }
   padding:20px 20px calc(40px + var(--safe-bottom));
   position:relative;
 }
-.ticket::before{
-  content:'';
-  display:block;
-  height:14px;
-  margin:0 -20px 18px;
-  background-image: radial-gradient(circle, var(--bg) 5px, transparent 5.5px);
-  background-size: 18px 14px;
-  background-position: 0 -7px;
-  background-color: var(--surface);
+.ticket-header{
+  display:flex; justify-content:flex-end;
+  position:sticky; top:0; z-index:1;
+  background:var(--bg); border-bottom:1px solid var(--border);
+  margin:0 -20px 18px; padding:10px 20px;
 }
 .ticket-close{
-  position:absolute; top:20px; right:20px;
   background:none; border:none; color:var(--text-dim);
   font-size:26px; cursor:pointer; padding:4px 8px;
 }
@@ -203,7 +198,7 @@ button, input, select, textarea{ font-family:inherit; }
 }
 .ticket-name{
   font-family:var(--font-display); font-size:26px; font-weight:700;
-  margin:6px 0 4px; padding-right:40px;
+  margin:6px 0 4px;
 }
 .ticket-notes{
   display:inline-block; margin-top:6px;

@@ -302,7 +302,9 @@ function renderTicket(r) {
   const stepsHtml = (r.steps || []).map(s => `<li>${escapeHtml(s)}</li>`).join('');
 
   ticketContent.innerHTML = `
-    <button class="ticket-close" id="ticketCloseBtn" aria-label="Close">&times;</button>
+    <div class="ticket-header">
+      <button class="ticket-close" id="ticketCloseBtn" aria-label="Close">&times;</button>
+    </div>
     <div class="ticket-cat">${CAT_LABELS[r.category] || r.category}</div>
     <h2 class="ticket-name">${escapeHtml(r.name)}</h2>
     ${r.notes ? `<span class="ticket-notes">${escapeHtml(r.notes)}</span>` : ''}
