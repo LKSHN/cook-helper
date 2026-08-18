@@ -240,7 +240,9 @@ button, input, select, textarea{ font-family:inherit; }
 }
 .form-header{
   display:flex; align-items:center; justify-content:space-between;
-  margin-bottom:18px; position:sticky; top:0; background:var(--bg); padding:4px 0 12px;
+  position:sticky; top:0; z-index:1;
+  background:var(--bg); border-bottom:1px solid var(--border);
+  margin:0 -20px 18px; padding:14px 20px 12px;
 }
 .form-header h2{ font-family:var(--font-display); font-size:18px; margin:0; }
 .btn-close{ background:none; border:none; color:var(--text-dim); font-size:24px; cursor:pointer; }
