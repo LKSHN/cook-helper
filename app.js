@@ -452,60 +452,26 @@ function moveRow(row, direction) {
 // Drag-to-reorder via Pointer Events (unifies mouse/touch/pen, unlike the
 // HTML5 drag-and-drop API which has poor touch support).
 //
-// Two things that matter for not locking up the page:
-// - The swap check (DOM query + getBoundingClientRect per sibling) only
-//   runs once per animation frame, not on every raw pointermove — a real
-//   drag can fire pointermove far more often than the screen repaints,
-//   and doing a forced-layout DOM query on each one is what caused the
-//   freeze.
-// - Tracking is done via document-level listeners added on pointerdown
-//   and removed on pointerup, instead of Element.setPointerCapture — more
-//   universally reliable than depending on capture semantics.
+// The row only follows the pointer visually while dragging (a cheap
+// transform, nothing else) — other rows don't shift and no DOM reordering
+// happens until the drop, when the row's final position determines a
+// single insert. Continuously reordering mid-drag was both expensive
+// (forced-layout geometry reads on every pointermove) and felt twitchy;
+// settling everything in one shot on release is both simpler and smoother.
 //
-// The dragged row's own position is tracked mathematically (originalTop +
-// deltaY) rather than by re-reading its own transformed
-// getBoundingClientRect() — not guaranteed to reflect a transform just
-// set in the same frame. Sibling rects (untransformed) are safe to read
-// directly.
+// Tracking is done via document-level listeners added on pointerdown and
+// removed on pointerup, instead of Element.setPointerCapture — more
+// universally reliable than depending on capture semantics.
 function makeDraggable(row, container) {
   const handle = row.querySelector('.drag-handle');
   let startY = 0;
   let originalTop = 0;
   let originalHeight = 0;
-  let lastCheckTime = 0;
+  let latestDeltaY = 0;
 
-  function checkForSwap(deltaY) {
-    const rowCenter = originalTop + originalHeight / 2 + deltaY;
-    for (const sib of container.querySelectorAll('.ingredient-row')) {
-      if (sib === row) continue;
-      const sibRect = sib.getBoundingClientRect();
-      const sibCenter = sibRect.top + sibRect.height / 2;
-      const movingDown = row.compareDocumentPosition(sib) & Node.DOCUMENT_POSITION_FOLLOWING;
-      if (movingDown && rowCenter > sibCenter) {
-        container.insertBefore(row, sib.nextSibling);
-        originalTop += sibRect.height;
-        break;
-      } else if (!movingDown && rowCenter < sibCenter) {
-        container.insertBefore(row, sib);
-        originalTop -= sibRect.height;
-        break;
-      }
-    }
-  }
-
-  // Plain timestamp throttle instead of requestAnimationFrame: a real drag
-  // can fire pointermove far more often than the screen repaints, and the
-  // swap check (DOM query + getBoundingClientRect per sibling) is a forced
-  // layout that's too expensive to redo on every single one. The visual
-  // transform still updates on every event for smooth tracking; only the
-  // expensive part is capped to ~60/sec.
   function onMove(e) {
-    const deltaY = e.clientY - startY;
-    row.style.transform = `translateY(${deltaY}px)`;
-    const now = performance.now();
-    if (now - lastCheckTime < 16) return;
-    lastCheckTime = now;
-    checkForSwap(deltaY);
+    latestDeltaY = e.clientY - startY;
+    row.style.transform = `translateY(${latestDeltaY}px)`;
   }
 
   function onEnd() {
@@ -514,11 +480,24 @@ function makeDraggable(row, container) {
     document.removeEventListener('pointermove', onMove);
     document.removeEventListener('pointerup', onEnd);
     document.removeEventListener('pointercancel', onEnd);
+
+    const rowCenter = originalTop + originalHeight / 2 + latestDeltaY;
+    const siblings = [...container.querySelectorAll('.ingredient-row')].filter(el => el !== row);
+    const target = siblings.find(sib => {
+      const sibRect = sib.getBoundingClientRect();
+      return rowCenter < sibRect.top + sibRect.height / 2;
+    });
+    if (target) {
+      container.insertBefore(row, target);
+    } else {
+      container.appendChild(row);
+    }
   }
 
   handle.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     startY = e.clientY;
+    latestDeltaY = 0;
     const rect = row.getBoundingClientRect();
     originalTop = rect.top;
     originalHeight = rect.height;
