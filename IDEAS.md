@@ -23,3 +23,5 @@ When you want one built, just point me at it (or say "build the next one").
 - Combine edit + full recipe view: "View full recipe" and the 3-dot Edit action now both open the same editable form — no more separate read-only screen. Photo lightbox (tap to zoom) carried over into the form.
 
 - Search placement + Shop tab: moved search below the Recap/MEP/Shop selector (was inside the header); added a Shop tab (placeholder for now, listed above for what it should become)
+
+- Ingredient separators: "+ Add separator" in the edit form inserts a labeled section divider (e.g. "For the sauce") into the ingredients list — drags/reorders alongside real ingredients, shown distinctly in the recipe view, excluded from ingredient counts and the MEP After list
