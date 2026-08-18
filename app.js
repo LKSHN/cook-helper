@@ -2,7 +2,6 @@
 
 let recipes = [];
 let searchTerm = '';
-let currentTicketId = null;
 let expandedCardId = null;
 let openCardMenuId = null;
 
@@ -25,9 +24,6 @@ const mepBeforeListEl = document.getElementById('mepBeforeList');
 const mepAfterListEl = document.getElementById('mepAfterList');
 
 const STATION_ORDER = ['starters', 'mains', 'desserts'];
-
-const ticketOverlay = document.getElementById('ticketOverlay');
-const ticketContent = document.getElementById('ticketContent');
 
 const formOverlay = document.getElementById('formOverlay');
 const recipeForm = document.getElementById('recipeForm');
@@ -197,7 +193,7 @@ function buildCard(r) {
   });
   card.querySelector('.card-view-full').addEventListener('click', (e) => {
     e.stopPropagation();
-    openTicket(r.id);
+    openForm(r.id);
   });
 
   if (r.id === openCardMenuId) card.querySelector('.card-menu').hidden = false;
@@ -391,10 +387,8 @@ function pushOverlayState() {
 }
 
 function hideOverlays() {
-  ticketOverlay.hidden = true;
   formOverlay.hidden = true;
   lightboxOverlay.hidden = true;
-  currentTicketId = null;
 }
 
 function closeOverlay() {
@@ -406,8 +400,8 @@ function closeOverlay() {
 }
 
 // The lightbox always pushes its own history entry (even on top of an
-// already-open ticket), so back-from-photo returns to the recipe instead
-// of skipping straight to the list.
+// already-open form), so back-from-photo returns to the recipe view
+// instead of skipping straight to the list.
 function openLightbox(url) {
   lightboxImg.src = url;
   history.pushState({ railOverlay: true, railLightbox: true }, '');
@@ -436,54 +430,6 @@ window.addEventListener('popstate', () => {
 });
 
 lightboxOverlay.addEventListener('click', closeLightbox);
-
-// ---- Ticket detail view ----
-function openTicket(id) {
-  const r = recipes.find(x => x.id === id);
-  if (!r) return;
-  currentTicketId = id;
-  renderTicket(r);
-  pushOverlayState();
-  ticketOverlay.hidden = false;
-}
-
-function renderTicket(r) {
-  const photosHtml = (r.photos || [])
-    .map(p => `<img src="${escapeHtml(p.url)}" alt="" loading="lazy">`)
-    .join('');
-
-  const ingredientsHtml = (r.ingredients || []).map(ingredientLiHtml).join('');
-
-  const stepsHtml = (r.steps || []).map(s => `<li>${escapeHtml(s)}</li>`).join('');
-
-  ticketContent.innerHTML = `
-    <div class="ticket-header">
-      <button class="ticket-close" id="ticketCloseBtn" aria-label="Close">&times;</button>
-    </div>
-    <div class="ticket-cat">${CAT_LABELS[r.category] || r.category}</div>
-    <h2 class="ticket-name">${escapeHtml(r.name)}</h2>
-    ${r.notes ? `<span class="ticket-notes">${escapeHtml(r.notes)}</span>` : ''}
-
-    ${photosHtml ? `<div class="ticket-photos">${photosHtml}</div>` : ''}
-
-    <div class="ticket-section-title">Ingredients</div>
-    <ul class="ingredient-list">${ingredientsHtml || '<li>No ingredients listed</li>'}</ul>
-
-    <div class="ticket-section-title">Method</div>
-    <ol class="steps-list">${stepsHtml || '<li>No steps listed</li>'}</ol>
-
-    <button class="ticket-edit-btn" id="ticketEditBtn">Edit recipe</button>
-  `;
-
-  document.getElementById('ticketCloseBtn').addEventListener('click', closeOverlay);
-  document.getElementById('ticketEditBtn').addEventListener('click', () => {
-    ticketOverlay.hidden = true;
-    openForm(r.id);
-  });
-  ticketContent.querySelectorAll('.ticket-photos img').forEach(img => {
-    img.addEventListener('click', () => openLightbox(img.src));
-  });
-}
 
 // ---- Add / Edit form ----
 addBtn.addEventListener('click', () => openForm());
@@ -538,6 +484,7 @@ function renderPhotoThumbs() {
         <button type="button" class="thumb-right" aria-label="Move later" ${index === formPhotos.length - 1 ? 'disabled' : ''}>&rarr;</button>
       </div>
     `;
+    thumb.querySelector('img').addEventListener('click', () => openLightbox(photo.url));
     thumb.querySelector('.thumb-left').addEventListener('click', () => {
       [formPhotos[index - 1], formPhotos[index]] = [formPhotos[index], formPhotos[index - 1]];
       renderPhotoThumbs();
