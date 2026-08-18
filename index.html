@@ -25,27 +25,46 @@
       <h1 class="brand">THE RAIL <span id="buildVersion" class="build-version"></span></h1>
       <button id="addBtn" class="btn-add" aria-label="Add recipe">+</button>
     </div>
-    <div class="search-wrap">
+    <div class="search-wrap" id="searchWrap">
       <input id="searchInput" type="text" placeholder="Find a dish, sauce, ingredient…" autocomplete="off">
     </div>
   </header>
 
-  <!-- Recipe list -->
-  <main id="cardList" class="card-list"></main>
+  <!-- Top-level view tabs -->
+  <nav class="view-tabs" id="viewTabs">
+    <button class="view-tab active" data-view="recap">Recap</button>
+    <button class="view-tab" data-view="mep">MEP</button>
+  </nav>
 
-  <!-- Empty state -->
-  <div id="emptyState" class="empty-state" hidden>
-    <p class="empty-title">Nothing on this station yet.</p>
-    <p class="empty-sub">Tap + to punch in your first recipe.</p>
+  <!-- Recap view -->
+  <div id="recapView" class="view">
+    <!-- Station anchors: jump to a section, don't filter -->
+    <nav class="station-tabs" id="stationTabs">
+      <button class="tab" data-cat="all">All</button>
+      <button class="tab" data-cat="starters">Starters</button>
+      <button class="tab" data-cat="mains">Mains</button>
+      <button class="tab" data-cat="desserts">Desserts</button>
+    </nav>
+
+    <main id="cardList" class="card-list"></main>
+
+    <!-- Empty state -->
+    <div id="emptyState" class="empty-state" hidden>
+      <p class="empty-title">Nothing here yet.</p>
+      <p class="empty-sub">Tap + to punch in your first recipe.</p>
+    </div>
   </div>
 
-  <!-- Station tabs -->
-  <nav class="station-tabs" id="stationTabs">
-    <button class="tab active" data-cat="all">All</button>
-    <button class="tab" data-cat="starters">Starters</button>
-    <button class="tab" data-cat="mains">Mains</button>
-    <button class="tab" data-cat="desserts">Desserts</button>
-  </nav>
+  <!-- MEP view -->
+  <div id="mepView" class="view" hidden>
+    <nav class="mep-mode-tabs" id="mepModeTabs">
+      <button class="mep-mode-tab active" data-mode="before">Before</button>
+      <button class="mep-mode-tab" data-mode="after">After</button>
+    </nav>
+
+    <div id="mepBeforeList" class="mep-list"></div>
+    <div id="mepAfterList" class="mep-list" hidden></div>
+  </div>
 
 </div>
 

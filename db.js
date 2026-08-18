@@ -20,6 +20,7 @@ firestore.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 const storage = firebase.storage();
 
 const recipesRef = firestore.collection('recipes');
+const mepBeforeRef = firestore.collection('mep').doc('beforeList');
 
 const RailDB = {
   // Subscribes to live changes; calls cb(recipes) immediately and on every
@@ -46,5 +47,14 @@ const RailDB = {
   },
   async deletePhoto(path) {
     await storage.ref(path).delete().catch(() => {});
+  },
+  // MEP "before service" prep checklist — one shared doc, synced like recipes.
+  onChangeMepList(cb) {
+    return mepBeforeRef.onSnapshot((snap) => {
+      cb((snap.data() && snap.data().items) || []);
+    });
+  },
+  async setMepList(items) {
+    await mepBeforeRef.set({ items });
   }
 };

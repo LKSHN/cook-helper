@@ -1,17 +1,30 @@
 // app.js — all UI logic for The Rail
 
 let recipes = [];
-let activeCategory = 'all';
 let searchTerm = '';
 let currentTicketId = null;
 let expandedCardId = null;
 let openCardMenuId = null;
 
+let activeView = 'recap';
+let mepMode = 'before';
+let mepBefore = [];
+
 const cardList = document.getElementById('cardList');
 const emptyState = document.getElementById('emptyState');
 const searchInput = document.getElementById('searchInput');
+const searchWrap = document.getElementById('searchWrap');
 const stationTabs = document.getElementById('stationTabs');
 const addBtn = document.getElementById('addBtn');
+
+const viewTabs = document.getElementById('viewTabs');
+const recapView = document.getElementById('recapView');
+const mepView = document.getElementById('mepView');
+const mepModeTabs = document.getElementById('mepModeTabs');
+const mepBeforeListEl = document.getElementById('mepBeforeList');
+const mepAfterListEl = document.getElementById('mepAfterList');
+
+const STATION_ORDER = ['starters', 'mains', 'desserts'];
 
 const ticketOverlay = document.getElementById('ticketOverlay');
 const ticketContent = document.getElementById('ticketContent');
@@ -80,18 +93,23 @@ function loadRecipes() {
   RailDB.onChange((data) => {
     recipes = data;
     render();
+    if (activeView === 'mep' && mepMode === 'after') renderMep();
+  });
+}
+
+function loadMep() {
+  RailDB.onChangeMepList((items) => {
+    mepBefore = items;
+    if (activeView === 'mep') renderMep();
   });
 }
 
 function filteredRecipes() {
-  return recipes
-    .filter(r => activeCategory === 'all' || r.category === activeCategory)
-    .filter(r => {
-      if (!searchTerm) return true;
-      const hay = (r.name + ' ' + (r.ingredients || []).map(i => i.name).join(' ')).toLowerCase();
-      return hay.includes(searchTerm.toLowerCase());
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
+  return recipes.filter(r => {
+    if (!searchTerm) return true;
+    const hay = (r.name + ' ' + (r.ingredients || []).map(i => i.name).join(' ')).toLowerCase();
+    return hay.includes(searchTerm.toLowerCase());
+  });
 }
 
 function render() {
@@ -99,78 +117,93 @@ function render() {
   cardList.innerHTML = '';
   emptyState.hidden = list.length > 0;
 
-  list.forEach(r => {
-    const thumbUrl = r.photos && r.photos[0] ? r.photos[0].url : null;
-    const ingredientsHtml = (r.ingredients || []).map(ingredientLiHtml).join('');
+  STATION_ORDER.forEach(cat => {
+    const group = list
+      .filter(r => r.category === cat)
+      .sort((a, b) => (b.ingredients || []).length - (a.ingredients || []).length || a.name.localeCompare(b.name));
+    if (!group.length) return;
 
-    // Native <details>/<summary> instead of a hand-rolled JS/CSS toggle:
-    // the browser owns the open/close state and layout reflow, which
-    // sidesteps a class of real-world rendering bugs a custom height
-    // toggle kept hitting on at least one device.
-    const card = document.createElement('details');
-    card.className = 'recipe-card';
-    card.innerHTML = `
-      <summary class="card-main">
-        ${thumbUrl ? `<img class="card-thumb" src="${escapeHtml(thumbUrl)}" alt="" loading="lazy">` : ''}
-        <div class="card-body">
-          <div class="card-top">
-            <h3 class="card-name">${escapeHtml(r.name)}</h3>
-            <span class="card-cat">${CAT_LABELS[r.category] || r.category}</span>
-          </div>
-          <div class="card-meta">${(r.ingredients || []).length} ingredients</div>
-          ${r.notes ? `<span class="card-notes">${escapeHtml(r.notes)}</span>` : ''}
-        </div>
-        <div class="card-menu-wrap">
-          <button type="button" class="card-menu-btn" aria-label="Recipe actions">&#8942;</button>
-          <div class="card-menu" hidden>
-            <button type="button" class="card-menu-edit">Edit</button>
-            <button type="button" class="card-menu-delete">Delete</button>
-          </div>
-        </div>
-      </summary>
-      <div class="card-accordion-inner">
-        <ul class="ingredient-list">${ingredientsHtml || '<li>No ingredients listed</li>'}</ul>
-        <button type="button" class="card-view-full">View full recipe &rarr;</button>
-      </div>
-    `;
+    const header = document.createElement('div');
+    header.className = 'station-section-header';
+    header.id = 'section-' + cat;
+    header.textContent = CAT_LABELS[cat] || cat;
+    cardList.appendChild(header);
 
-    card.addEventListener('toggle', () => {
-      if (card.open) {
-        cardList.querySelectorAll('details.recipe-card[open]').forEach(other => {
-          if (other !== card) other.open = false;
-        });
-        expandedCardId = r.id;
-      } else if (expandedCardId === r.id) {
-        expandedCardId = null;
-      }
-    });
-    card.querySelector('.card-menu-btn').addEventListener('click', (e) => {
-      e.preventDefault(); // don't let the native <summary> toggle fire
-      e.stopPropagation();
-      toggleCardMenu(card, r.id);
-    });
-    card.querySelector('.card-menu-edit').addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      closeCardMenu();
-      openForm(r.id);
-    });
-    card.querySelector('.card-menu-delete').addEventListener('click', async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      closeCardMenu();
-      await deleteRecipeById(r.id, r.photos);
-    });
-    card.querySelector('.card-view-full').addEventListener('click', (e) => {
-      e.stopPropagation();
-      openTicket(r.id);
-    });
-
-    if (r.id === openCardMenuId) card.querySelector('.card-menu').hidden = false;
-    if (r.id === expandedCardId) card.open = true;
-
-    cardList.appendChild(card);
+    group.forEach(r => cardList.appendChild(buildCard(r)));
   });
+}
+
+function buildCard(r) {
+  const thumbUrl = r.photos && r.photos[0] ? r.photos[0].url : null;
+  const ingredientsHtml = (r.ingredients || []).map(ingredientLiHtml).join('');
+
+  // Native <details>/<summary> instead of a hand-rolled JS/CSS toggle:
+  // the browser owns the open/close state and layout reflow, which
+  // sidesteps a class of real-world rendering bugs a custom height
+  // toggle kept hitting on at least one device.
+  const card = document.createElement('details');
+  card.className = 'recipe-card';
+  card.innerHTML = `
+    <summary class="card-main">
+      ${thumbUrl ? `<img class="card-thumb" src="${escapeHtml(thumbUrl)}" alt="" loading="lazy">` : ''}
+      <div class="card-body">
+        <div class="card-top">
+          <h3 class="card-name">${escapeHtml(r.name)}</h3>
+          <span class="card-cat">${CAT_LABELS[r.category] || r.category}</span>
+        </div>
+        <div class="card-meta">${(r.ingredients || []).length} ingredients</div>
+        ${r.notes ? `<span class="card-notes">${escapeHtml(r.notes)}</span>` : ''}
+      </div>
+      <div class="card-menu-wrap">
+        <button type="button" class="card-menu-btn" aria-label="Recipe actions">&#8942;</button>
+        <div class="card-menu" hidden>
+          <button type="button" class="card-menu-edit">Edit</button>
+          <button type="button" class="card-menu-delete">Delete</button>
+        </div>
+      </div>
+    </summary>
+    <div class="card-accordion-inner">
+      <ul class="ingredient-list">${ingredientsHtml || '<li>No ingredients listed</li>'}</ul>
+      <button type="button" class="card-view-full">View full recipe &rarr;</button>
+    </div>
+  `;
+
+  card.addEventListener('toggle', () => {
+    if (card.open) {
+      cardList.querySelectorAll('details.recipe-card[open]').forEach(other => {
+        if (other !== card) other.open = false;
+      });
+      expandedCardId = r.id;
+    } else if (expandedCardId === r.id) {
+      expandedCardId = null;
+    }
+  });
+  card.querySelector('.card-menu-btn').addEventListener('click', (e) => {
+    e.preventDefault(); // don't let the native <summary> toggle fire
+    e.stopPropagation();
+    toggleCardMenu(card, r.id);
+  });
+  card.querySelector('.card-menu-edit').addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeCardMenu();
+    openForm(r.id);
+  });
+  card.querySelector('.card-menu-delete').addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeCardMenu();
+    await deleteRecipeById(r.id, r.photos);
+  });
+  card.querySelector('.card-view-full').addEventListener('click', (e) => {
+    e.stopPropagation();
+    openTicket(r.id);
+  });
+
+  if (r.id === openCardMenuId) card.querySelector('.card-menu').hidden = false;
+  if (r.id === expandedCardId) card.open = true;
+
+  return card;
 }
 
 function toggleCardMenu(card, id) {
@@ -211,15 +244,135 @@ function ingredientLiHtml(ing) {
   return `<li><span class="ing-name-wrap">${dot}${escapeHtml(ing.name)}</span><span class="ingredient-qty">${qty}</span></li>`;
 }
 
-// ---- Station tabs ----
+// ---- Station tabs (scroll-to-section anchors, not filters) ----
 stationTabs.addEventListener('click', (e) => {
   const btn = e.target.closest('.tab');
   if (!btn) return;
-  [...stationTabs.children].forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  activeCategory = btn.dataset.cat;
-  render();
+  const cat = btn.dataset.cat;
+  if (cat === 'all') {
+    cardList.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+  const section = document.getElementById('section-' + cat);
+  if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
+
+// ---- Top-level view tabs (Recap / MEP) ----
+viewTabs.addEventListener('click', (e) => {
+  const btn = e.target.closest('.view-tab');
+  if (!btn) return;
+  activeView = btn.dataset.view;
+  [...viewTabs.children].forEach(t => t.classList.toggle('active', t === btn));
+  recapView.hidden = activeView !== 'recap';
+  mepView.hidden = activeView !== 'mep';
+  searchWrap.hidden = activeView !== 'recap';
+  addBtn.hidden = activeView !== 'recap';
+  if (activeView === 'mep') renderMep();
+});
+
+// ---- MEP mode tabs (Before / After) ----
+mepModeTabs.addEventListener('click', (e) => {
+  const btn = e.target.closest('.mep-mode-tab');
+  if (!btn) return;
+  mepMode = btn.dataset.mode;
+  [...mepModeTabs.children].forEach(t => t.classList.toggle('active', t === btn));
+  renderMep();
+});
+
+function renderMep() {
+  mepBeforeListEl.hidden = mepMode !== 'before';
+  mepAfterListEl.hidden = mepMode !== 'after';
+  if (mepMode === 'before') renderMepBefore();
+  else renderMepAfter();
+}
+
+function renderMepBefore() {
+  mepBeforeListEl.innerHTML = '';
+  if (!mepBefore.length) {
+    mepBeforeListEl.innerHTML = '<div class="mep-empty">Nothing to prep yet.<br>Add ingredients from the After tab.</div>';
+    return;
+  }
+
+  mepBefore.forEach(item => {
+    const unitOptions = UNITS.map(u => {
+      const val = u === 'None' ? '' : u;
+      return `<option value="${val}" ${item.unit === val ? 'selected' : ''}>${u}</option>`;
+    }).join('');
+
+    const row = document.createElement('div');
+    row.className = 'mep-row';
+    row.innerHTML = `
+      <button type="button" class="mep-check" aria-label="Mark prepped">&#10003;</button>
+      <span class="mep-row-name">${escapeHtml(item.name)}</span>
+      <input type="text" class="ing-amount" placeholder="Qty" value="${escapeHtml(item.amount || '')}">
+      <select class="ing-unit">${unitOptions}</select>
+      <button type="button" class="mep-row-remove" aria-label="Remove">&times;</button>
+    `;
+
+    row.querySelector('.mep-check').addEventListener('click', () => removeFromBeforeList(item.id));
+    row.querySelector('.mep-row-remove').addEventListener('click', () => removeFromBeforeList(item.id));
+    row.querySelector('.ing-amount').addEventListener('change', (e) => {
+      updateBeforeItem(item.id, { amount: e.target.value.trim() });
+    });
+    row.querySelector('.ing-unit').addEventListener('change', (e) => {
+      updateBeforeItem(item.id, { unit: e.target.value });
+    });
+
+    mepBeforeListEl.appendChild(row);
+  });
+}
+
+function aggregatedIngredients() {
+  const map = new Map();
+  recipes.forEach(r => {
+    (r.ingredients || []).forEach(ing => {
+      const key = (ing.name || '').trim().toLowerCase();
+      if (!key || map.has(key)) return;
+      map.set(key, { name: ing.name.trim(), unit: ing.unit || '' });
+    });
+  });
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function renderMepAfter() {
+  mepAfterListEl.innerHTML = '';
+  const items = aggregatedIngredients();
+  if (!items.length) {
+    mepAfterListEl.innerHTML = '<div class="mep-empty">No ingredients yet.<br>Add some recipes on the Recap tab first.</div>';
+    return;
+  }
+
+  items.forEach(ing => {
+    const key = ing.name.toLowerCase();
+    const already = mepBefore.some(i => i.name.trim().toLowerCase() === key);
+
+    const row = document.createElement('div');
+    row.className = 'mep-add-row';
+    row.innerHTML = `
+      <span class="mep-add-name">${escapeHtml(ing.name)}</span>
+      <button type="button" class="mep-add-btn" ${already ? 'disabled' : ''} aria-label="Add to prep list">${already ? '&check;' : '+'}</button>
+    `;
+    if (!already) {
+      row.querySelector('.mep-add-btn').addEventListener('click', () => addToBeforeList(ing.name, ing.unit));
+    }
+    mepAfterListEl.appendChild(row);
+  });
+}
+
+function addToBeforeList(name, unit) {
+  const key = name.trim().toLowerCase();
+  if (mepBefore.some(i => i.name.trim().toLowerCase() === key)) return;
+  const items = [...mepBefore, { id: uid(), name: name.trim(), amount: '', unit: unit || '' }];
+  RailDB.setMepList(items);
+}
+
+function removeFromBeforeList(id) {
+  RailDB.setMepList(mepBefore.filter(i => i.id !== id));
+}
+
+function updateBeforeItem(id, patch) {
+  RailDB.setMepList(mepBefore.map(i => (i.id === id ? { ...i, ...patch } : i)));
+}
 
 // ---- Search ----
 searchInput.addEventListener('input', (e) => {
@@ -669,3 +822,4 @@ if ('caches' in window) {
 }
 
 loadRecipes();
+loadMep();
