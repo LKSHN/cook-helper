@@ -78,7 +78,7 @@ button, input, select, textarea{ font-family:inherit; }
 
 .recipe-card{
   background:var(--surface); border:1px solid var(--border);
-  border-radius:12px; position:relative; overflow:hidden;
+  border-radius:12px; position:relative;
   transition:border-color .15s ease;
 }
 .recipe-card[open]{ border-color:var(--accent); }
