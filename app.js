@@ -450,37 +450,32 @@ function moveRow(row, direction) {
 }
 
 // Drag-to-reorder via Pointer Events (unifies mouse/touch/pen, unlike the
-// HTML5 drag-and-drop API which has poor touch support). The dragged row
-// is visually offset with a CSS transform that follows the pointer. The
-// row's own "virtual" position is tracked mathematically (originalTop +
-// deltaY) rather than by re-reading getBoundingClientRect() on the row
-// itself — a transform just set in the same handler isn't guaranteed to
-// be reflected by a geometry query yet, but sibling rects (untransformed)
-// are safe to read directly.
+// HTML5 drag-and-drop API which has poor touch support).
+//
+// Two things that matter for not locking up the page:
+// - The swap check (DOM query + getBoundingClientRect per sibling) only
+//   runs once per animation frame, not on every raw pointermove — a real
+//   drag can fire pointermove far more often than the screen repaints,
+//   and doing a forced-layout DOM query on each one is what caused the
+//   freeze.
+// - Tracking is done via document-level listeners added on pointerdown
+//   and removed on pointerup, instead of Element.setPointerCapture — more
+//   universally reliable than depending on capture semantics.
+//
+// The dragged row's own position is tracked mathematically (originalTop +
+// deltaY) rather than by re-reading its own transformed
+// getBoundingClientRect() — not guaranteed to reflect a transform just
+// set in the same frame. Sibling rects (untransformed) are safe to read
+// directly.
 function makeDraggable(row, container) {
   const handle = row.querySelector('.drag-handle');
-  let pointerId = null;
   let startY = 0;
   let originalTop = 0;
   let originalHeight = 0;
+  let lastCheckTime = 0;
 
-  handle.addEventListener('pointerdown', (e) => {
-    pointerId = e.pointerId;
-    startY = e.clientY;
-    const rect = row.getBoundingClientRect();
-    originalTop = rect.top;
-    originalHeight = rect.height;
-    row.classList.add('dragging');
-    handle.setPointerCapture(pointerId);
-  });
-
-  handle.addEventListener('pointermove', (e) => {
-    if (e.pointerId !== pointerId) return;
-    const deltaY = e.clientY - startY;
-    row.style.transform = `translateY(${deltaY}px)`;
-
+  function checkForSwap(deltaY) {
     const rowCenter = originalTop + originalHeight / 2 + deltaY;
-
     for (const sib of container.querySelectorAll('.ingredient-row')) {
       if (sib === row) continue;
       const sibRect = sib.getBoundingClientRect();
@@ -496,16 +491,42 @@ function makeDraggable(row, container) {
         break;
       }
     }
-  });
+  }
 
-  function endDrag(e) {
-    if (e.pointerId !== pointerId) return;
+  // Plain timestamp throttle instead of requestAnimationFrame: a real drag
+  // can fire pointermove far more often than the screen repaints, and the
+  // swap check (DOM query + getBoundingClientRect per sibling) is a forced
+  // layout that's too expensive to redo on every single one. The visual
+  // transform still updates on every event for smooth tracking; only the
+  // expensive part is capped to ~60/sec.
+  function onMove(e) {
+    const deltaY = e.clientY - startY;
+    row.style.transform = `translateY(${deltaY}px)`;
+    const now = performance.now();
+    if (now - lastCheckTime < 16) return;
+    lastCheckTime = now;
+    checkForSwap(deltaY);
+  }
+
+  function onEnd() {
     row.classList.remove('dragging');
     row.style.transform = '';
-    pointerId = null;
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onEnd);
+    document.removeEventListener('pointercancel', onEnd);
   }
-  handle.addEventListener('pointerup', endDrag);
-  handle.addEventListener('pointercancel', endDrag);
+
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    startY = e.clientY;
+    const rect = row.getBoundingClientRect();
+    originalTop = rect.top;
+    originalHeight = rect.height;
+    row.classList.add('dragging');
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onEnd);
+    document.addEventListener('pointercancel', onEnd);
+  });
 }
 
 function reorderButtonsHtml() {
