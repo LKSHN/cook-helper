@@ -33,6 +33,7 @@ const formClose = document.getElementById('formClose');
 const fDelete = document.getElementById('fDelete');
 const ingredientRows = document.getElementById('ingredientRows');
 const addIngredientBtn = document.getElementById('addIngredient');
+const addSeparatorBtn = document.getElementById('addSeparator');
 const stepRows = document.getElementById('stepRows');
 const addStepBtn = document.getElementById('addStep');
 const photoThumbs = document.getElementById('photoThumbs');
@@ -109,6 +110,12 @@ function filteredRecipes() {
   });
 }
 
+// Separators are section labels mixed into the ingredients array, not
+// real ingredients — exclude them from counts.
+function realIngredients(r) {
+  return (r.ingredients || []).filter(i => i.type !== 'separator');
+}
+
 function render() {
   const list = filteredRecipes();
   cardList.innerHTML = '';
@@ -117,7 +124,7 @@ function render() {
   STATION_ORDER.forEach(cat => {
     const group = list
       .filter(r => r.category === cat)
-      .sort((a, b) => (b.ingredients || []).length - (a.ingredients || []).length || a.name.localeCompare(b.name));
+      .sort((a, b) => realIngredients(b).length - realIngredients(a).length || a.name.localeCompare(b.name));
     if (!group.length) return;
 
     const header = document.createElement('div');
@@ -148,7 +155,7 @@ function buildCard(r) {
           <h3 class="card-name">${escapeHtml(r.name)}</h3>
           <span class="card-cat">${CAT_LABELS[r.category] || r.category}</span>
         </div>
-        <div class="card-meta">${(r.ingredients || []).length} ingredients</div>
+        <div class="card-meta">${realIngredients(r).length} ingredients</div>
         ${r.notes ? `<span class="card-notes">${escapeHtml(r.notes)}</span>` : ''}
       </div>
       <div class="card-menu-wrap">
@@ -236,6 +243,9 @@ function escapeHtml(str) {
 }
 
 function ingredientLiHtml(ing) {
+  if (ing.type === 'separator') {
+    return `<li class="ingredient-separator">${escapeHtml(ing.name)}</li>`;
+  }
   const qty = ing.amount ? ing.amount + ' ' + escapeHtml(ing.unit || '') : '';
   const dot = ing.color ? `<span class="ing-dot" style="background:${ing.color}"></span>` : '';
   return `<li><span class="ing-name-wrap">${dot}${escapeHtml(ing.name)}</span><span class="ingredient-qty">${qty}</span></li>`;
@@ -323,7 +333,7 @@ function renderMepBefore() {
 function aggregatedIngredients() {
   const map = new Map();
   recipes.forEach(r => {
-    (r.ingredients || []).forEach(ing => {
+    realIngredients(r).forEach(ing => {
       const key = (ing.name || '').trim().toLowerCase();
       if (!key || map.has(key)) return;
       map.set(key, { name: ing.name.trim(), unit: ing.unit || '' });
@@ -454,7 +464,10 @@ function openForm(id) {
     document.getElementById('fName').value = r.name;
     document.getElementById('fCategory').value = r.category;
     document.getElementById('fNotes').value = r.notes || '';
-    (r.ingredients || []).forEach(ing => addIngredientRow(ing.name, ing.amount, ing.unit, ing.color));
+    (r.ingredients || []).forEach(ing => {
+      if (ing.type === 'separator') addSeparatorRow(ing.name);
+      else addIngredientRow(ing.name, ing.amount, ing.unit, ing.color);
+    });
     (r.steps || []).forEach(step => addStepRow(step));
     formPhotos = (r.photos || []).slice();
     originalPhotoPaths = new Set(formPhotos.map(p => p.path));
@@ -649,6 +662,25 @@ function addIngredientRow(name = '', amount = '', unit = '', color = '') {
   ingredientRows.appendChild(row);
 }
 
+// A separator is a section label mixed into the same ingredient-rows list
+// (e.g. "For the sauce") rather than a real ingredient. It shares the
+// .ingredient-row class and container so it rides along with the existing
+// drag-to-reorder system for free — makeDraggable() and the submit-time
+// DOM-order read don't need to know separators exist as a separate thing.
+function addSeparatorRow(label = '') {
+  const row = document.createElement('div');
+  row.className = 'ingredient-row ingredient-row--separator';
+  row.dataset.type = 'separator';
+  row.innerHTML = `
+    <input type="text" placeholder="Section label (e.g. For the sauce)" class="sep-label" value="${escapeHtml(label)}">
+    <div class="drag-handle" aria-label="Drag to reorder"></div>
+    <button type="button" class="row-remove" aria-label="Remove separator">&times;</button>
+  `;
+  makeDraggable(row, ingredientRows);
+  row.querySelector('.row-remove').addEventListener('click', () => row.remove());
+  ingredientRows.appendChild(row);
+}
+
 function toggleColorPicker(row) {
   const alreadyOpenOnThisRow = openColorPickerRow === row;
   closeColorPicker();
@@ -693,6 +725,7 @@ document.addEventListener('click', (e) => {
 });
 
 addIngredientBtn.addEventListener('click', () => addIngredientRow());
+addSeparatorBtn.addEventListener('click', () => addSeparatorRow());
 
 function addStepRow(text = '') {
   const row = document.createElement('div');
@@ -714,12 +747,17 @@ recipeForm.addEventListener('submit', async (e) => {
   const id = document.getElementById('recipeId').value || uid();
 
   const ingredients = [...ingredientRows.querySelectorAll('.ingredient-row')]
-    .map(row => ({
-      name: row.querySelector('.ing-name').value.trim(),
-      amount: row.querySelector('.ing-amount').value.trim(),
-      unit: row.querySelector('.ing-unit').value.trim(),
-      color: row.dataset.color || ''
-    }))
+    .map(row => {
+      if (row.dataset.type === 'separator') {
+        return { type: 'separator', name: row.querySelector('.sep-label').value.trim() };
+      }
+      return {
+        name: row.querySelector('.ing-name').value.trim(),
+        amount: row.querySelector('.ing-amount').value.trim(),
+        unit: row.querySelector('.ing-unit').value.trim(),
+        color: row.dataset.color || ''
+      };
+    })
     .filter(ing => ing.name);
 
   const steps = [...stepRows.querySelectorAll('.step-row .step-text')]

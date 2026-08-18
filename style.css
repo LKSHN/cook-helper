@@ -217,6 +217,13 @@ button, input, select, textarea{ font-family:inherit; }
   padding:8px 0; border-bottom:1px solid var(--border);
   font-size:14px;
 }
+.ingredient-list li.ingredient-separator{
+  display:block; border-bottom:1px dashed var(--border);
+  margin-top:6px; padding:12px 0 6px;
+  font-family:var(--font-mono); font-size:11px; color:var(--text-dim);
+  text-transform:uppercase; letter-spacing:1px;
+}
+.ingredient-list li.ingredient-separator:first-child{ margin-top:0; padding-top:0; }
 .ingredient-qty{ font-family:var(--font-mono); color:var(--accent); white-space:nowrap; font-weight:600; }
 .ing-name-wrap{ display:flex; align-items:center; }
 .ing-dot{
@@ -320,6 +327,22 @@ button, input, select, textarea{ font-family:inherit; }
   background:none; border:1px dashed var(--border); color:var(--accent);
   padding:8px 14px; border-radius:8px; font-size:13px; cursor:pointer;
 }
+.form-btn-row{ display:flex; gap:8px; flex-wrap:wrap; }
+.form-btn-row .btn-secondary{ margin-top:10px; }
+
+/* Separator row — a section label (e.g. "For the sauce") mixed into the
+   ingredient rows, sharing the same drag-to-reorder system. */
+.ingredient-row--separator{
+  background:var(--surface); border:1px dashed var(--border);
+  border-radius:8px; padding:2px 4px;
+}
+.ingredient-row--separator .sep-label{
+  flex:1; background:none; border:none; color:var(--text-dim);
+  font-family:var(--font-mono); font-size:12px;
+  text-transform:uppercase; letter-spacing:1px;
+  padding:9px 8px;
+}
+.ingredient-row--separator .sep-label:focus{ outline:none; color:var(--text); }
 
 /* Photos */
 /* Keeps the file input in the layout (unlike display:none) — some mobile
