@@ -3,6 +3,8 @@
 Drop anything here — one line or a whole paragraph, doesn't need to be polished.
 When you want one built, just point me at it (or say "build the next one").
 
+- Shop tab: currently just a placeholder ("Shop is coming soon.") — build out what it should actually do
+
 ## Done
 (move items here once built, so the list above stays current)
 
@@ -17,3 +19,7 @@ When you want one built, just point me at it (or say "build the next one").
 - Colors: Add in the edit menu a way to change colors of an ingredient when expending a recipe — each ingredient row has a swatch button opening an 8-color palette; the color shows as a dot next to the name in both the accordion and full recipe view
 
 - Remove a tab: remove the "sauce & dressing" tab — dropped from filter tabs and the form's station dropdown
+
+- Combine edit + full recipe view: "View full recipe" and the 3-dot Edit action now both open the same editable form — no more separate read-only screen. Photo lightbox (tap to zoom) carried over into the form.
+
+- Search placement + Shop tab: moved search below the Recap/MEP/Shop selector (was inside the header); added a Shop tab (placeholder for now, listed above for what it should become)
