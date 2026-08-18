@@ -449,6 +449,65 @@ function moveRow(row, direction) {
   }
 }
 
+// Drag-to-reorder via Pointer Events (unifies mouse/touch/pen, unlike the
+// HTML5 drag-and-drop API which has poor touch support). The dragged row
+// is visually offset with a CSS transform that follows the pointer. The
+// row's own "virtual" position is tracked mathematically (originalTop +
+// deltaY) rather than by re-reading getBoundingClientRect() on the row
+// itself — a transform just set in the same handler isn't guaranteed to
+// be reflected by a geometry query yet, but sibling rects (untransformed)
+// are safe to read directly.
+function makeDraggable(row, container) {
+  const handle = row.querySelector('.drag-handle');
+  let pointerId = null;
+  let startY = 0;
+  let originalTop = 0;
+  let originalHeight = 0;
+
+  handle.addEventListener('pointerdown', (e) => {
+    pointerId = e.pointerId;
+    startY = e.clientY;
+    const rect = row.getBoundingClientRect();
+    originalTop = rect.top;
+    originalHeight = rect.height;
+    row.classList.add('dragging');
+    handle.setPointerCapture(pointerId);
+  });
+
+  handle.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== pointerId) return;
+    const deltaY = e.clientY - startY;
+    row.style.transform = `translateY(${deltaY}px)`;
+
+    const rowCenter = originalTop + originalHeight / 2 + deltaY;
+
+    for (const sib of container.querySelectorAll('.ingredient-row')) {
+      if (sib === row) continue;
+      const sibRect = sib.getBoundingClientRect();
+      const sibCenter = sibRect.top + sibRect.height / 2;
+      const movingDown = row.compareDocumentPosition(sib) & Node.DOCUMENT_POSITION_FOLLOWING;
+      if (movingDown && rowCenter > sibCenter) {
+        container.insertBefore(row, sib.nextSibling);
+        originalTop += sibRect.height;
+        break;
+      } else if (!movingDown && rowCenter < sibCenter) {
+        container.insertBefore(row, sib);
+        originalTop -= sibRect.height;
+        break;
+      }
+    }
+  });
+
+  function endDrag(e) {
+    if (e.pointerId !== pointerId) return;
+    row.classList.remove('dragging');
+    row.style.transform = '';
+    pointerId = null;
+  }
+  handle.addEventListener('pointerup', endDrag);
+  handle.addEventListener('pointercancel', endDrag);
+}
+
 function reorderButtonsHtml() {
   return `
     <div class="reorder-btns">
@@ -476,10 +535,10 @@ function addIngredientRow(name = '', amount = '', unit = '', color = '') {
     <input type="text" placeholder="Ingredient" class="ing-name" value="${escapeHtml(name)}">
     <input type="text" placeholder="Qty" class="ing-amount" value="${escapeHtml(amount)}">
     <select class="ing-unit">${unitOptions}</select>
-    ${reorderButtonsHtml()}
+    <div class="drag-handle" aria-label="Drag to reorder"></div>
     <button type="button" class="row-remove" aria-label="Remove ingredient">&times;</button>
   `;
-  wireReorderButtons(row);
+  makeDraggable(row, ingredientRows);
   row.querySelector('.row-remove').addEventListener('click', () => row.remove());
   row.querySelector('.ing-color-btn').addEventListener('click', (e) => {
     e.stopPropagation();

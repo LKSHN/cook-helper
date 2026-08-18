@@ -306,6 +306,23 @@ button, input, select, textarea{ font-family:inherit; }
 }
 .reorder-btns button:disabled{ opacity:0.3; cursor:default; }
 
+.drag-handle{
+  flex:0 0 auto; width:24px; height:38px;
+  display:flex; align-items:center; justify-content:center;
+  cursor:grab; touch-action:none; /* stops the page from scrolling under the drag gesture */
+}
+.drag-handle::before{
+  content:''; width:3px; height:3px; border-radius:50%; background:var(--text-dim);
+  box-shadow:
+    7px 0 0 var(--text-dim),
+    0 7px 0 var(--text-dim), 7px 7px 0 var(--text-dim),
+    0 14px 0 var(--text-dim), 7px 14px 0 var(--text-dim);
+}
+.ingredient-row.dragging{
+  cursor:grabbing; position:relative; z-index:5;
+  background:var(--surface-raised); box-shadow:0 6px 16px rgba(0,0,0,0.4);
+}
+
 .btn-secondary{
   display:inline-block; margin-top:10px; align-self:flex-start;
   background:none; border:1px dashed var(--border); color:var(--accent);
