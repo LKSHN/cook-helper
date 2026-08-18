@@ -43,11 +43,13 @@ let formSaved = false;
 const CAT_LABELS = {
   starters: 'Starters',
   mains: 'Mains',
-  desserts: 'Desserts',
-  sauces: 'Sauces & Dressings'
+  desserts: 'Desserts'
 };
 
 const UNITS = ['gr', 'kg', 'L', 'mL', 'CaS', 'CaC', 'pincée', 'pièce', 'botte', 'None'];
+
+const INGREDIENT_COLORS = ['#E85D4C', '#FFB627', '#F5D547', '#6FCF6F', '#4ECDC4', '#3EA8FF', '#9B7EDE', '#E87EC0'];
+let openColorPickerRow = null;
 
 function uid() {
   return 'r_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -99,10 +101,7 @@ function render() {
 
   list.forEach(r => {
     const thumbUrl = r.photos && r.photos[0] ? r.photos[0].url : null;
-    const ingredientsHtml = (r.ingredients || []).map(ing => {
-      const qty = ing.amount ? ing.amount + ' ' + escapeHtml(ing.unit || '') : '';
-      return `<li><span>${escapeHtml(ing.name)}</span><span class="ingredient-qty">${qty}</span></li>`;
-    }).join('');
+    const ingredientsHtml = (r.ingredients || []).map(ingredientLiHtml).join('');
 
     // Native <details>/<summary> instead of a hand-rolled JS/CSS toggle:
     // the browser owns the open/close state and layout reflow, which
@@ -206,6 +205,12 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function ingredientLiHtml(ing) {
+  const qty = ing.amount ? ing.amount + ' ' + escapeHtml(ing.unit || '') : '';
+  const dot = ing.color ? `<span class="ing-dot" style="background:${ing.color}"></span>` : '';
+  return `<li><span class="ing-name-wrap">${dot}${escapeHtml(ing.name)}</span><span class="ingredient-qty">${qty}</span></li>`;
+}
+
 // ---- Station tabs ----
 stationTabs.addEventListener('click', (e) => {
   const btn = e.target.closest('.tab');
@@ -294,10 +299,7 @@ function renderTicket(r) {
     .map(p => `<img src="${escapeHtml(p.url)}" alt="" loading="lazy">`)
     .join('');
 
-  const ingredientsHtml = (r.ingredients || []).map(ing => {
-    const qty = ing.amount ? ing.amount + ' ' + escapeHtml(ing.unit || '') : '';
-    return `<li><span>${escapeHtml(ing.name)}</span><span class="ingredient-qty">${qty}</span></li>`;
-  }).join('');
+  const ingredientsHtml = (r.ingredients || []).map(ingredientLiHtml).join('');
 
   const stepsHtml = (r.steps || []).map(s => `<li>${escapeHtml(s)}</li>`).join('');
 
@@ -351,7 +353,7 @@ function openForm(id) {
     document.getElementById('fName').value = r.name;
     document.getElementById('fCategory').value = r.category;
     document.getElementById('fNotes').value = r.notes || '';
-    (r.ingredients || []).forEach(ing => addIngredientRow(ing.name, ing.amount, ing.unit));
+    (r.ingredients || []).forEach(ing => addIngredientRow(ing.name, ing.amount, ing.unit, ing.color));
     (r.steps || []).forEach(step => addStepRow(step));
     formPhotos = (r.photos || []).slice();
     originalPhotoPaths = new Set(formPhotos.map(p => p.path));
@@ -461,14 +463,16 @@ function wireReorderButtons(row) {
   row.querySelector('.row-down').addEventListener('click', () => moveRow(row, 'down'));
 }
 
-function addIngredientRow(name = '', amount = '', unit = '') {
+function addIngredientRow(name = '', amount = '', unit = '', color = '') {
   const row = document.createElement('div');
   row.className = 'ingredient-row';
+  row.dataset.color = color;
   const unitOptions = UNITS.map(u => {
     const val = u === 'None' ? '' : u;
     return `<option value="${val}" ${unit === val ? 'selected' : ''}>${u}</option>`;
   }).join('');
   row.innerHTML = `
+    <button type="button" class="ing-color-btn" aria-label="Set ingredient color" style="${color ? `background:${color}` : ''}"></button>
     <input type="text" placeholder="Ingredient" class="ing-name" value="${escapeHtml(name)}">
     <input type="text" placeholder="Qty" class="ing-amount" value="${escapeHtml(amount)}">
     <select class="ing-unit">${unitOptions}</select>
@@ -477,8 +481,55 @@ function addIngredientRow(name = '', amount = '', unit = '') {
   `;
   wireReorderButtons(row);
   row.querySelector('.row-remove').addEventListener('click', () => row.remove());
+  row.querySelector('.ing-color-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleColorPicker(row);
+  });
   ingredientRows.appendChild(row);
 }
+
+function toggleColorPicker(row) {
+  const alreadyOpenOnThisRow = openColorPickerRow === row;
+  closeColorPicker();
+  if (alreadyOpenOnThisRow) return;
+
+  const picker = document.createElement('div');
+  picker.className = 'color-picker';
+  const currentColor = row.dataset.color || '';
+  picker.innerHTML = `
+    <button type="button" class="none-swatch" aria-label="No color">&times;</button>
+    ${INGREDIENT_COLORS.map(c => `<button type="button" class="swatch${c === currentColor ? ' selected' : ''}" style="background:${c}" data-color="${c}" aria-label="Set color"></button>`).join('')}
+  `;
+  picker.querySelector('.none-swatch').addEventListener('click', (e) => {
+    e.stopPropagation();
+    setIngredientColor(row, '');
+  });
+  picker.querySelectorAll('.swatch').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setIngredientColor(row, btn.dataset.color);
+    });
+  });
+  row.appendChild(picker);
+  openColorPickerRow = row;
+}
+
+function setIngredientColor(row, color) {
+  row.dataset.color = color;
+  row.querySelector('.ing-color-btn').style.background = color || '';
+  closeColorPicker();
+}
+
+function closeColorPicker() {
+  if (!openColorPickerRow) return;
+  const picker = openColorPickerRow.querySelector('.color-picker');
+  if (picker) picker.remove();
+  openColorPickerRow = null;
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.color-picker') && !e.target.closest('.ing-color-btn')) closeColorPicker();
+});
 
 addIngredientBtn.addEventListener('click', () => addIngredientRow());
 
@@ -505,7 +556,8 @@ recipeForm.addEventListener('submit', async (e) => {
     .map(row => ({
       name: row.querySelector('.ing-name').value.trim(),
       amount: row.querySelector('.ing-amount').value.trim(),
-      unit: row.querySelector('.ing-unit').value.trim()
+      unit: row.querySelector('.ing-unit').value.trim(),
+      color: row.dataset.color || ''
     }))
     .filter(ing => ing.name);
 
