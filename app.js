@@ -19,6 +19,7 @@ const addBtn = document.getElementById('addBtn');
 const viewTabs = document.getElementById('viewTabs');
 const recapView = document.getElementById('recapView');
 const mepView = document.getElementById('mepView');
+const shopView = document.getElementById('shopView');
 const mepModeTabs = document.getElementById('mepModeTabs');
 const mepBeforeListEl = document.getElementById('mepBeforeList');
 const mepAfterListEl = document.getElementById('mepAfterList');
@@ -253,7 +254,7 @@ stationTabs.addEventListener('click', (e) => {
   if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
-// ---- Top-level view tabs (Recap / MEP) ----
+// ---- Top-level view tabs (Recap / MEP / Shop) ----
 viewTabs.addEventListener('click', (e) => {
   const btn = e.target.closest('.view-tab');
   if (!btn) return;
@@ -261,6 +262,7 @@ viewTabs.addEventListener('click', (e) => {
   [...viewTabs.children].forEach(t => t.classList.toggle('active', t === btn));
   recapView.hidden = activeView !== 'recap';
   mepView.hidden = activeView !== 'mep';
+  shopView.hidden = activeView !== 'shop';
   searchWrap.hidden = activeView !== 'recap';
   addBtn.hidden = activeView !== 'recap';
   if (activeView === 'mep') renderMep();

@@ -25,16 +25,18 @@
       <h1 class="brand">THE RAIL <span id="buildVersion" class="build-version"></span></h1>
       <button id="addBtn" class="btn-add" aria-label="Add recipe">+</button>
     </div>
-    <div class="search-wrap" id="searchWrap">
-      <input id="searchInput" type="text" placeholder="Find a dish, sauce, ingredient…" autocomplete="off">
-    </div>
   </header>
 
   <!-- Top-level view tabs -->
   <nav class="view-tabs" id="viewTabs">
     <button class="view-tab active" data-view="recap">Recap</button>
     <button class="view-tab" data-view="mep">MEP</button>
+    <button class="view-tab" data-view="shop">Shop</button>
   </nav>
+
+  <div class="search-wrap" id="searchWrap">
+    <input id="searchInput" type="text" placeholder="Find a dish, sauce, ingredient…" autocomplete="off">
+  </div>
 
   <!-- Recap view -->
   <div id="recapView" class="view">
@@ -64,6 +66,13 @@
 
     <div id="mepBeforeList" class="mep-list"></div>
     <div id="mepAfterList" class="mep-list" hidden></div>
+  </div>
+
+  <!-- Shop view (placeholder for now) -->
+  <div id="shopView" class="view" hidden>
+    <div class="empty-state">
+      <p class="empty-title">Shop is coming soon.</p>
+    </div>
   </div>
 
 </div>

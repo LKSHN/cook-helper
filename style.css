@@ -67,6 +67,12 @@ button, input, select, textarea{ font-family:inherit; }
 }
 .btn-add:active{ transform:scale(0.94); }
 
+.search-wrap{
+  flex-shrink:0;
+  padding:10px 16px;
+  background:var(--bg); border-bottom:1px solid var(--border);
+}
+.search-wrap[hidden]{ display:none; }
 .search-wrap input{
   width:100%; padding:11px 14px;
   background:var(--surface); border:1px solid var(--border);
@@ -75,7 +81,7 @@ button, input, select, textarea{ font-family:inherit; }
 .search-wrap input::placeholder{ color:var(--text-dim); }
 .search-wrap input:focus{ outline:2px solid var(--accent); outline-offset:1px; }
 
-/* Top-level view tabs (Recap / MEP) */
+/* Top-level view tabs (Recap / MEP / Shop) */
 .view-tabs{
   flex-shrink:0; display:flex; gap:8px;
   padding:10px 16px; background:var(--bg); border-bottom:1px solid var(--border);
