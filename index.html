@@ -58,6 +58,7 @@
 <!-- Add/Edit form -->
 <div id="formOverlay" class="overlay" hidden>
   <form id="recipeForm" class="recipe-form">
+    <div class="form-perforation"></div>
     <div class="form-header">
       <button type="button" id="formClose" class="btn-close" aria-label="Close">&times;</button>
       <h2 id="formTitle">New Recipe</h2>
@@ -77,15 +78,15 @@
       <option value="sauces">Sauces &amp; Dressings</option>
     </select>
 
-    <label class="field-label">Ingredients</label>
+    <div class="form-section-title">Ingredients</div>
     <div id="ingredientRows" class="ingredient-rows"></div>
     <button type="button" id="addIngredient" class="btn-secondary">+ Add ingredient</button>
 
-    <label class="field-label">Method</label>
+    <div class="form-section-title">Method</div>
     <div id="stepRows" class="step-rows"></div>
     <button type="button" id="addStep" class="btn-secondary">+ Add step</button>
 
-    <label class="field-label">Photos</label>
+    <div class="form-section-title">Photos</div>
     <div id="photoThumbs" class="photo-thumbs"></div>
     <input type="file" id="fPhotoInput" class="visually-hidden" accept="image/*" multiple>
     <label for="fPhotoInput" class="btn-secondary">+ Add photo</label>
