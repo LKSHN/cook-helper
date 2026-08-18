@@ -238,16 +238,6 @@ button, input, select, textarea{ font-family:inherit; }
   padding:16px 20px calc(40px + var(--safe-bottom));
   display:flex; flex-direction:column;
 }
-/* Same torn-ticket-edge motif as the recipe detail view, so editing feels
-   like the same object as viewing rather than a bolted-on web form. */
-.form-perforation{
-  height:14px;
-  margin:0 -20px 8px;
-  background-image: radial-gradient(circle, var(--bg) 5px, transparent 5.5px);
-  background-size: 18px 14px;
-  background-position: 0 -7px;
-  background-color: var(--surface);
-}
 .form-header{
   display:flex; align-items:center; justify-content:space-between;
   margin-bottom:18px; position:sticky; top:0; background:var(--bg); padding:4px 0 12px;
@@ -263,13 +253,6 @@ button, input, select, textarea{ font-family:inherit; }
   font-family:var(--font-mono); font-size:11px; color:var(--text-dim);
   text-transform:uppercase; letter-spacing:1px;
   margin:16px 0 6px;
-}
-/* Same treatment as .ticket-section-title, for the list-based sections
-   (Ingredients/Method/Photos) that mirror the read view's structure. */
-.form-section-title{
-  font-family:var(--font-mono); font-size:11px; color:var(--text-dim);
-  text-transform:uppercase; letter-spacing:1.5px;
-  margin:26px 0 10px; border-bottom:1px dashed var(--border); padding-bottom:8px;
 }
 .recipe-form input[type=text],
 .recipe-form input[type=number],
