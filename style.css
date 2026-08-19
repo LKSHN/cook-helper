@@ -278,6 +278,15 @@ button, input, select, textarea{ font-family:inherit; }
   flex:0 0 auto; width:24px; height:24px; border-radius:50%;
   border:2px solid var(--border); background:transparent; cursor:pointer; padding:0;
 }
+/* Whether an ingredient shows up in the MEP After list — on by default,
+   tap to exclude things that never need prepping (e.g. salt, water). */
+.ing-mep-btn{
+  flex:0 0 auto; width:26px; height:26px; border-radius:7px;
+  border:2px solid var(--border); background:transparent; cursor:pointer; padding:0;
+  color:var(--accent); font-size:13px; line-height:1;
+  display:flex; align-items:center; justify-content:center;
+}
+.ing-mep-btn.active{ border-color:var(--accent); background:var(--accent-dim); }
 .color-picker{
   position:absolute; top:100%; left:0; margin-top:4px; z-index:10;
   display:flex; flex-wrap:wrap; gap:6px; width:112px;
