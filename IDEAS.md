@@ -31,3 +31,5 @@ When you want one built, just point me at it (or say "build the next one").
 - Shared MEP toggle: excluding an ingredient (e.g. "Beurre") now applies everywhere that name is used, not just the recipe you toggled it from — moved from a per-recipe flag to one shared synced list, same pattern as the before-list. Existing per-recipe exclusions were migrated automatically on first load.
 
 - MEP container colors: Before-list items have a color swatch (the same 8-color palette used on recipe ingredients) marking which container/bin they go in — new items inherit the color from their recipe ingredient as a starting default, editable afterward independent of the recipe. Added a sort toggle to the Before list ("Order added" / "By container") to group prepped items by that color. Time-limit/expiry tracking per item was discussed but held off for now.
+
+- MEP After sort: added the same "By container" sort toggle to the After tab (alongside its default Alphabetical order), grouping the source ingredient list by the recipe's color tag — same palette-order grouping logic as the Before list, so the two stay consistent.

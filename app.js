@@ -30,6 +30,7 @@ const mepView = document.getElementById('mepView');
 const shopView = document.getElementById('shopView');
 const mepModeTabs = document.getElementById('mepModeTabs');
 const mepSortTabs = document.getElementById('mepSortTabs');
+const mepAfterSortTabs = document.getElementById('mepAfterSortTabs');
 const mepBeforeListEl = document.getElementById('mepBeforeList');
 const mepAfterListEl = document.getElementById('mepAfterList');
 
@@ -337,8 +338,17 @@ function renderMep() {
   mepBeforeListEl.hidden = mepMode !== 'before';
   mepAfterListEl.hidden = mepMode !== 'after';
   mepSortTabs.hidden = mepMode !== 'before';
+  mepAfterSortTabs.hidden = mepMode !== 'after';
   if (mepMode === 'before') renderMepBefore();
   else renderMepAfter();
+}
+
+// Palette position of a container color, for sorting groups in a stable,
+// consistent order; no-color items sort last. Shared by both the Before
+// and After "By container" sorts.
+function colorSortIndex(color) {
+  const i = INGREDIENT_COLORS.indexOf(color);
+  return i === -1 ? INGREDIENT_COLORS.length : i;
 }
 
 // 'added' keeps Firestore array order (insertion order); 'container'
@@ -348,11 +358,7 @@ let mepBeforeSort = 'added';
 
 function sortedMepBefore() {
   if (mepBeforeSort !== 'container') return mepBefore;
-  const colorIndex = (c) => {
-    const i = INGREDIENT_COLORS.indexOf(c);
-    return i === -1 ? INGREDIENT_COLORS.length : i;
-  };
-  return [...mepBefore].sort((a, b) => colorIndex(a.color) - colorIndex(b.color));
+  return [...mepBefore].sort((a, b) => colorSortIndex(a.color) - colorSortIndex(b.color));
 }
 
 mepSortTabs.addEventListener('click', (e) => {
@@ -417,9 +423,27 @@ function aggregatedIngredients() {
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// 'name' is aggregatedIngredients()'s default alphabetical order;
+// 'container' groups by color in palette order, no-color items last. Not
+// persisted — purely a local view preference, same as mepBeforeSort.
+let mepAfterSort = 'name';
+
+function sortedAfterItems(items) {
+  if (mepAfterSort !== 'container') return items;
+  return [...items].sort((a, b) => colorSortIndex(a.color) - colorSortIndex(b.color));
+}
+
+mepAfterSortTabs.addEventListener('click', (e) => {
+  const btn = e.target.closest('.mep-sort-tab');
+  if (!btn) return;
+  mepAfterSort = btn.dataset.sort;
+  [...mepAfterSortTabs.children].forEach(t => t.classList.toggle('active', t === btn));
+  renderMepAfter();
+});
+
 function renderMepAfter() {
   mepAfterListEl.innerHTML = '';
-  const items = aggregatedIngredients();
+  const items = sortedAfterItems(aggregatedIngredients());
   if (!items.length) {
     mepAfterListEl.innerHTML = '<div class="mep-empty">No ingredients yet.<br>Add some recipes on the Recap tab first.</div>';
     return;
