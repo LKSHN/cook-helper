@@ -5,8 +5,6 @@ When you want one built, just point me at it (or say "build the next one").
 
 - Shop tab: currently just a placeholder ("Shop is coming soon.") — build out what it should actually do
 
-- MEP list/ edit view: Add a way to select an ingredient for MEP or not in the edit recipe view
-
 ## Done
 (move items here once built, so the list above stays current)
 
@@ -27,3 +25,5 @@ When you want one built, just point me at it (or say "build the next one").
 - Search placement + Shop tab: moved search below the Recap/MEP/Shop selector (was inside the header); added a Shop tab (placeholder for now, listed above for what it should become)
 
 - Ingredient separators: "+ Add separator" in the edit form inserts a labeled section divider (e.g. "For the sauce") into the ingredients list — drags/reorders alongside real ingredients, shown distinctly in the recipe view, excluded from ingredient counts and the MEP After list
+
+- MEP list / edit view: each ingredient row in the edit form now has a toggle (next to the unit dropdown) to include or exclude it from MEP — on by default, tap to exclude things that never need prepping (e.g. salt, water). The MEP After list respects it, only showing ingredients still marked for MEP.

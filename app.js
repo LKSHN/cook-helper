@@ -334,6 +334,7 @@ function aggregatedIngredients() {
   const map = new Map();
   recipes.forEach(r => {
     realIngredients(r).forEach(ing => {
+      if (ing.mep === false) return;
       const key = (ing.name || '').trim().toLowerCase();
       if (!key || map.has(key)) return;
       map.set(key, { name: ing.name.trim(), unit: ing.unit || '' });
@@ -466,7 +467,7 @@ function openForm(id) {
     document.getElementById('fNotes').value = r.notes || '';
     (r.ingredients || []).forEach(ing => {
       if (ing.type === 'separator') addSeparatorRow(ing.name);
-      else addIngredientRow(ing.name, ing.amount, ing.unit, ing.color);
+      else addIngredientRow(ing.name, ing.amount, ing.unit, ing.color, ing.mep);
     });
     (r.steps || []).forEach(step => addStepRow(step));
     formPhotos = (r.photos || []).slice();
@@ -637,10 +638,12 @@ function wireReorderButtons(row) {
   row.querySelector('.row-down').addEventListener('click', () => moveRow(row, 'down'));
 }
 
-function addIngredientRow(name = '', amount = '', unit = '', color = '') {
+function addIngredientRow(name = '', amount = '', unit = '', color = '', mep = true) {
   const row = document.createElement('div');
   row.className = 'ingredient-row';
   row.dataset.color = color;
+  const mepIncluded = mep !== false;
+  row.dataset.mep = mepIncluded ? 'true' : 'false';
   const unitOptions = UNITS.map(u => {
     const val = u === 'None' ? '' : u;
     return `<option value="${val}" ${unit === val ? 'selected' : ''}>${u}</option>`;
@@ -650,6 +653,7 @@ function addIngredientRow(name = '', amount = '', unit = '', color = '') {
     <input type="text" placeholder="Ingredient" class="ing-name" value="${escapeHtml(name)}">
     <input type="text" placeholder="Qty" class="ing-amount" value="${escapeHtml(amount)}">
     <select class="ing-unit">${unitOptions}</select>
+    <button type="button" class="ing-mep-btn${mepIncluded ? ' active' : ''}" aria-label="Include in MEP prep list" title="Include in MEP prep list">${mepIncluded ? '&#10003;' : ''}</button>
     <div class="drag-handle" aria-label="Drag to reorder"></div>
     <button type="button" class="row-remove" aria-label="Remove ingredient">&times;</button>
   `;
@@ -659,7 +663,20 @@ function addIngredientRow(name = '', amount = '', unit = '', color = '') {
     e.stopPropagation();
     toggleColorPicker(row);
   });
+  row.querySelector('.ing-mep-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleMepIncluded(row);
+  });
   ingredientRows.appendChild(row);
+}
+
+function toggleMepIncluded(row) {
+  const included = row.dataset.mep !== 'false';
+  const next = !included;
+  row.dataset.mep = next ? 'true' : 'false';
+  const btn = row.querySelector('.ing-mep-btn');
+  btn.classList.toggle('active', next);
+  btn.innerHTML = next ? '&#10003;' : '';
 }
 
 // A separator is a section label mixed into the same ingredient-rows list
@@ -755,7 +772,8 @@ recipeForm.addEventListener('submit', async (e) => {
         name: row.querySelector('.ing-name').value.trim(),
         amount: row.querySelector('.ing-amount').value.trim(),
         unit: row.querySelector('.ing-unit').value.trim(),
-        color: row.dataset.color || ''
+        color: row.dataset.color || '',
+        mep: row.dataset.mep !== 'false'
       };
     })
     .filter(ing => ing.name);
