@@ -5,6 +5,7 @@ An installable, offline-friendly recipe and MEP (prep-list) reference for a kitc
 ## Live app
 
 https://lkshn.github.io/cook-helper/
+https://splendid-hamster-9ce1a2.netlify.app
 
 ## Stack
 
