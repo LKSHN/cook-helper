@@ -8,6 +8,14 @@ let openCardMenuId = null;
 let activeView = 'recap';
 let mepMode = 'before';
 let mepBefore = [];
+// Ingredient names excluded from MEP everywhere they appear, not just in
+// one recipe — see toggleMepExclusion(). mepExclusionsDocExists tracks
+// whether the shared doc exists yet, so the one-time migration below only
+// ever runs once (recipesEverLoaded/mepMigrationDone gate the same thing).
+let mepExcludedNames = [];
+let mepExclusionsDocExists = null;
+let recipesEverLoaded = false;
+let mepMigrationDone = false;
 
 const cardList = document.getElementById('cardList');
 const emptyState = document.getElementById('emptyState');
@@ -90,8 +98,10 @@ window.addEventListener('unhandledrejection', (e) => {
 function loadRecipes() {
   RailDB.onChange((data) => {
     recipes = data;
+    recipesEverLoaded = true;
     render();
     if (activeView === 'mep' && mepMode === 'after') renderMep();
+    maybeMigrateLegacyMepFlags();
   });
 }
 
@@ -100,6 +110,41 @@ function loadMep() {
     mepBefore = items;
     if (activeView === 'mep') renderMep();
   });
+}
+
+function isMepExcluded(name) {
+  return mepExcludedNames.includes((name || '').trim().toLowerCase());
+}
+
+function loadMepExclusions() {
+  RailDB.onChangeMepExclusions((names, exists) => {
+    mepExcludedNames = names;
+    mepExclusionsDocExists = exists;
+    maybeMigrateLegacyMepFlags();
+    syncAllMepButtons();
+    if (activeView === 'mep' && mepMode === 'after') renderMepAfter();
+  });
+}
+
+// One-time migration from the old per-recipe-ingredient `mep: false` flag
+// (which couldn't be shared across recipes) to the new shared exclusion
+// list. Waits for both the exclusions doc's existence and the recipes to
+// be known before deciding — whichever of the two listeners fires first
+// just records its half and returns.
+function maybeMigrateLegacyMepFlags() {
+  if (mepMigrationDone) return;
+  if (mepExclusionsDocExists === null || !recipesEverLoaded) return;
+  mepMigrationDone = true;
+  if (mepExclusionsDocExists) return; // already has a real doc — nothing to migrate
+
+  const legacy = new Set();
+  recipes.forEach(r => (r.ingredients || []).forEach(ing => {
+    if (ing.mep === false && ing.name) legacy.add(ing.name.trim().toLowerCase());
+  }));
+  if (legacy.size) {
+    mepExcludedNames = [...legacy];
+    RailDB.setMepExclusions(mepExcludedNames);
+  }
 }
 
 function filteredRecipes() {
@@ -334,7 +379,7 @@ function aggregatedIngredients() {
   const map = new Map();
   recipes.forEach(r => {
     realIngredients(r).forEach(ing => {
-      if (ing.mep === false) return;
+      if (isMepExcluded(ing.name)) return;
       const key = (ing.name || '').trim().toLowerCase();
       if (!key || map.has(key)) return;
       map.set(key, { name: ing.name.trim(), unit: ing.unit || '' });
@@ -467,7 +512,7 @@ function openForm(id) {
     document.getElementById('fNotes').value = r.notes || '';
     (r.ingredients || []).forEach(ing => {
       if (ing.type === 'separator') addSeparatorRow(ing.name);
-      else addIngredientRow(ing.name, ing.amount, ing.unit, ing.color, ing.mep);
+      else addIngredientRow(ing.name, ing.amount, ing.unit, ing.color);
     });
     (r.steps || []).forEach(step => addStepRow(step));
     formPhotos = (r.photos || []).slice();
@@ -638,12 +683,10 @@ function wireReorderButtons(row) {
   row.querySelector('.row-down').addEventListener('click', () => moveRow(row, 'down'));
 }
 
-function addIngredientRow(name = '', amount = '', unit = '', color = '', mep = true) {
+function addIngredientRow(name = '', amount = '', unit = '', color = '') {
   const row = document.createElement('div');
   row.className = 'ingredient-row';
   row.dataset.color = color;
-  const mepIncluded = mep !== false;
-  row.dataset.mep = mepIncluded ? 'true' : 'false';
   const unitOptions = UNITS.map(u => {
     const val = u === 'None' ? '' : u;
     return `<option value="${val}" ${unit === val ? 'selected' : ''}>${u}</option>`;
@@ -653,7 +696,7 @@ function addIngredientRow(name = '', amount = '', unit = '', color = '', mep = t
     <input type="text" placeholder="Ingredient" class="ing-name" value="${escapeHtml(name)}">
     <input type="text" placeholder="Qty" class="ing-amount" value="${escapeHtml(amount)}">
     <select class="ing-unit">${unitOptions}</select>
-    <button type="button" class="ing-mep-btn${mepIncluded ? ' active' : ''}" aria-label="Include in MEP prep list" title="Include in MEP prep list">${mepIncluded ? '&#10003;' : ''}</button>
+    <button type="button" class="ing-mep-btn" aria-label="Include in MEP prep list" title="Include in MEP — applies to this ingredient in every recipe"></button>
     <div class="drag-handle" aria-label="Drag to reorder"></div>
     <button type="button" class="row-remove" aria-label="Remove ingredient">&times;</button>
   `;
@@ -665,18 +708,41 @@ function addIngredientRow(name = '', amount = '', unit = '', color = '', mep = t
   });
   row.querySelector('.ing-mep-btn').addEventListener('click', (e) => {
     e.stopPropagation();
-    toggleMepIncluded(row);
+    const currentName = row.querySelector('.ing-name').value.trim();
+    if (currentName) toggleMepExclusion(currentName);
   });
+  // The MEP toggle's state is keyed by ingredient name, not by this row —
+  // re-sync it live as the name changes so typing "Salt" immediately shows
+  // whatever the shared setting for "Salt" already is.
+  row.querySelector('.ing-name').addEventListener('input', () => syncMepButton(row));
   ingredientRows.appendChild(row);
+  syncMepButton(row);
 }
 
-function toggleMepIncluded(row) {
-  const included = row.dataset.mep !== 'false';
-  const next = !included;
-  row.dataset.mep = next ? 'true' : 'false';
+// Toggles whether `name` is excluded from MEP everywhere it's used — this
+// is shared across every recipe, not just the row that was clicked. See
+// mepExcludedNames.
+function toggleMepExclusion(name) {
+  const key = name.trim().toLowerCase();
+  if (!key) return;
+  const wasExcluded = isMepExcluded(key);
+  const next = wasExcluded
+    ? mepExcludedNames.filter(n => n !== key)
+    : [...mepExcludedNames, key];
+  RailDB.setMepExclusions(next);
+  showToast(wasExcluded ? 'Included in MEP again' : 'Excluded from MEP everywhere');
+}
+
+function syncMepButton(row) {
+  const name = row.querySelector('.ing-name').value.trim();
+  const included = !isMepExcluded(name);
   const btn = row.querySelector('.ing-mep-btn');
-  btn.classList.toggle('active', next);
-  btn.innerHTML = next ? '&#10003;' : '';
+  btn.classList.toggle('active', included);
+  btn.innerHTML = included ? '&#10003;' : '';
+}
+
+function syncAllMepButtons() {
+  ingredientRows.querySelectorAll('.ing-mep-btn').forEach(btn => syncMepButton(btn.closest('.ingredient-row')));
 }
 
 // A separator is a section label mixed into the same ingredient-rows list
@@ -772,8 +838,7 @@ recipeForm.addEventListener('submit', async (e) => {
         name: row.querySelector('.ing-name').value.trim(),
         amount: row.querySelector('.ing-amount').value.trim(),
         unit: row.querySelector('.ing-unit').value.trim(),
-        color: row.dataset.color || '',
-        mep: row.dataset.mep !== 'false'
+        color: row.dataset.color || ''
       };
     })
     .filter(ing => ing.name);
@@ -828,3 +893,4 @@ if ('caches' in window) {
 
 loadRecipes();
 loadMep();
+loadMepExclusions();

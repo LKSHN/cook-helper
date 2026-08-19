@@ -21,6 +21,7 @@ const storage = firebase.storage();
 
 const recipesRef = firestore.collection('recipes');
 const mepBeforeRef = firestore.collection('mep').doc('beforeList');
+const mepExclusionsRef = firestore.collection('mep').doc('excludedIngredients');
 
 const RailDB = {
   // Subscribes to live changes; calls cb(recipes) immediately and on every
@@ -56,5 +57,17 @@ const RailDB = {
   },
   async setMepList(items) {
     await mepBeforeRef.set({ items });
+  },
+  // Ingredient names excluded from MEP, shared across every recipe that
+  // uses them (e.g. salt, water) — one doc, same pattern as the before
+  // list. cb's second arg tells the caller whether the doc exists yet, so
+  // a one-time migration from the old per-recipe flag can run exactly once.
+  onChangeMepExclusions(cb) {
+    return mepExclusionsRef.onSnapshot((snap) => {
+      cb((snap.data() && snap.data().names) || [], snap.exists);
+    });
+  },
+  async setMepExclusions(names) {
+    await mepExclusionsRef.set({ names });
   }
 };
