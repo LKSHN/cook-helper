@@ -27,3 +27,5 @@ When you want one built, just point me at it (or say "build the next one").
 - Ingredient separators: "+ Add separator" in the edit form inserts a labeled section divider (e.g. "For the sauce") into the ingredients list — drags/reorders alongside real ingredients, shown distinctly in the recipe view, excluded from ingredient counts and the MEP After list
 
 - MEP list / edit view: each ingredient row in the edit form now has a toggle (next to the unit dropdown) to include or exclude it from MEP — on by default, tap to exclude things that never need prepping (e.g. salt, water). The MEP After list respects it, only showing ingredients still marked for MEP.
+
+- Shared MEP toggle: excluding an ingredient (e.g. "Beurre") now applies everywhere that name is used, not just the recipe you toggled it from — moved from a per-recipe flag to one shared synced list, same pattern as the before-list. Existing per-recipe exclusions were migrated automatically on first load.
