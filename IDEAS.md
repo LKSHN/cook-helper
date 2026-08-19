@@ -35,3 +35,7 @@ When you want one built, just point me at it (or say "build the next one").
 - MEP After sort: added the same "By container" sort toggle to the After tab (alongside its default Alphabetical order), grouping the source ingredient list by the recipe's color tag — same palette-order grouping logic as the Before list, so the two stay consistent.
 
 - Edit recipe from MEP After list: tapping an ingredient's name in the After tab opens a small popover listing every recipe that uses it — tap one to jump straight into its edit form. Shown consistently even when only one recipe matches, so the interaction never changes shape.
+
+- MEP Before list: removed the unit dropdown from each row (qty field stays) — it wasn't pulling its weight next to the free-text amount.
+
+- MEP After list: the color dot is now an editable swatch button, same as the Before list's — changing it there updates that ingredient's container color across every recipe that uses it. Colors already set on Before-list items stay independent once added, as before.

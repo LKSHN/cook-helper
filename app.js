@@ -377,11 +377,6 @@ function renderMepBefore() {
   }
 
   sortedMepBefore().forEach(item => {
-    const unitOptions = UNITS.map(u => {
-      const val = u === 'None' ? '' : u;
-      return `<option value="${val}" ${item.unit === val ? 'selected' : ''}>${u}</option>`;
-    }).join('');
-
     const row = document.createElement('div');
     row.className = 'mep-row';
     row.innerHTML = `
@@ -389,7 +384,6 @@ function renderMepBefore() {
       <button type="button" class="ing-color-btn" aria-label="Set container color" style="${item.color ? `background:${item.color}` : ''}"></button>
       <span class="mep-row-name">${escapeHtml(item.name)}</span>
       <input type="text" class="ing-amount" placeholder="Qty" value="${escapeHtml(item.amount || '')}">
-      <select class="ing-unit">${unitOptions}</select>
       <button type="button" class="mep-row-remove" aria-label="Remove">&times;</button>
     `;
 
@@ -397,9 +391,6 @@ function renderMepBefore() {
     row.querySelector('.mep-row-remove').addEventListener('click', () => removeFromBeforeList(item.id));
     row.querySelector('.ing-amount').addEventListener('change', (e) => {
       updateBeforeItem(item.id, { amount: e.target.value.trim() });
-    });
-    row.querySelector('.ing-unit').addEventListener('change', (e) => {
-      updateBeforeItem(item.id, { unit: e.target.value });
     });
     row.querySelector('.ing-color-btn').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -458,12 +449,12 @@ function renderMepAfter() {
   items.forEach(ing => {
     const key = ing.name.toLowerCase();
     const already = mepBefore.some(i => i.name.trim().toLowerCase() === key);
-    const dot = ing.color ? `<span class="ing-dot" style="background:${ing.color}"></span>` : '';
 
     const row = document.createElement('div');
     row.className = 'mep-add-row';
     row.innerHTML = `
-      <span class="mep-add-name clickable">${dot}${escapeHtml(ing.name)}</span>
+      <button type="button" class="ing-color-btn" aria-label="Set container color" style="${ing.color ? `background:${ing.color}` : ''}"></button>
+      <span class="mep-add-name clickable">${escapeHtml(ing.name)}</span>
       <button type="button" class="mep-add-btn" ${already ? 'disabled' : ''} aria-label="Add to prep list">${already ? '&check;' : '+'}</button>
     `;
     row.querySelector('.mep-add-name').addEventListener('click', (e) => {
@@ -471,10 +462,32 @@ function renderMepAfter() {
       const matches = recipes.filter(r => ing.recipeIds.includes(r.id));
       toggleIngredientRecipePicker(row, matches);
     });
+    row.querySelector('.ing-color-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleColorPicker(row, ing.color || '', (color) => setIngredientColorEverywhere(ing.name, color));
+    });
     if (!already) {
       row.querySelector('.mep-add-btn').addEventListener('click', () => addToBeforeList(ing.name, ing.unit, ing.color));
     }
     mepAfterListEl.appendChild(row);
+  });
+}
+
+// Changing an ingredient's color from the After list applies it to that
+// ingredient everywhere it's used across recipes — same "shared by name"
+// pattern as the MEP exclusion toggle. Recipes already added to the Before
+// list keep their own independent color (see addToBeforeList).
+function setIngredientColorEverywhere(name, color) {
+  const key = name.trim().toLowerCase();
+  recipes.forEach(r => {
+    if (!realIngredients(r).some(i => (i.name || '').trim().toLowerCase() === key)) return;
+    const updated = {
+      ...r,
+      ingredients: (r.ingredients || []).map(i =>
+        i.type !== 'separator' && (i.name || '').trim().toLowerCase() === key ? { ...i, color } : i
+      )
+    };
+    RailDB.put(updated);
   });
 }
 
