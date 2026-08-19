@@ -29,6 +29,7 @@ const recapView = document.getElementById('recapView');
 const mepView = document.getElementById('mepView');
 const shopView = document.getElementById('shopView');
 const mepModeTabs = document.getElementById('mepModeTabs');
+const mepSortTabs = document.getElementById('mepSortTabs');
 const mepBeforeListEl = document.getElementById('mepBeforeList');
 const mepAfterListEl = document.getElementById('mepAfterList');
 
@@ -335,9 +336,32 @@ mepModeTabs.addEventListener('click', (e) => {
 function renderMep() {
   mepBeforeListEl.hidden = mepMode !== 'before';
   mepAfterListEl.hidden = mepMode !== 'after';
+  mepSortTabs.hidden = mepMode !== 'before';
   if (mepMode === 'before') renderMepBefore();
   else renderMepAfter();
 }
+
+// 'added' keeps Firestore array order (insertion order); 'container'
+// groups items by their color tag, in palette order, with no-container
+// items last. Not persisted — purely a local view preference.
+let mepBeforeSort = 'added';
+
+function sortedMepBefore() {
+  if (mepBeforeSort !== 'container') return mepBefore;
+  const colorIndex = (c) => {
+    const i = INGREDIENT_COLORS.indexOf(c);
+    return i === -1 ? INGREDIENT_COLORS.length : i;
+  };
+  return [...mepBefore].sort((a, b) => colorIndex(a.color) - colorIndex(b.color));
+}
+
+mepSortTabs.addEventListener('click', (e) => {
+  const btn = e.target.closest('.mep-sort-tab');
+  if (!btn) return;
+  mepBeforeSort = btn.dataset.sort;
+  [...mepSortTabs.children].forEach(t => t.classList.toggle('active', t === btn));
+  renderMepBefore();
+});
 
 function renderMepBefore() {
   mepBeforeListEl.innerHTML = '';
@@ -346,7 +370,7 @@ function renderMepBefore() {
     return;
   }
 
-  mepBefore.forEach(item => {
+  sortedMepBefore().forEach(item => {
     const unitOptions = UNITS.map(u => {
       const val = u === 'None' ? '' : u;
       return `<option value="${val}" ${item.unit === val ? 'selected' : ''}>${u}</option>`;
@@ -356,6 +380,7 @@ function renderMepBefore() {
     row.className = 'mep-row';
     row.innerHTML = `
       <button type="button" class="mep-check" aria-label="Mark prepped">&#10003;</button>
+      <button type="button" class="ing-color-btn" aria-label="Set container color" style="${item.color ? `background:${item.color}` : ''}"></button>
       <span class="mep-row-name">${escapeHtml(item.name)}</span>
       <input type="text" class="ing-amount" placeholder="Qty" value="${escapeHtml(item.amount || '')}">
       <select class="ing-unit">${unitOptions}</select>
@@ -370,6 +395,10 @@ function renderMepBefore() {
     row.querySelector('.ing-unit').addEventListener('change', (e) => {
       updateBeforeItem(item.id, { unit: e.target.value });
     });
+    row.querySelector('.ing-color-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleColorPicker(row, item.color || '', (color) => updateBeforeItem(item.id, { color }));
+    });
 
     mepBeforeListEl.appendChild(row);
   });
@@ -382,7 +411,7 @@ function aggregatedIngredients() {
       if (isMepExcluded(ing.name)) return;
       const key = (ing.name || '').trim().toLowerCase();
       if (!key || map.has(key)) return;
-      map.set(key, { name: ing.name.trim(), unit: ing.unit || '' });
+      map.set(key, { name: ing.name.trim(), unit: ing.unit || '', color: ing.color || '' });
     });
   });
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -399,24 +428,28 @@ function renderMepAfter() {
   items.forEach(ing => {
     const key = ing.name.toLowerCase();
     const already = mepBefore.some(i => i.name.trim().toLowerCase() === key);
+    const dot = ing.color ? `<span class="ing-dot" style="background:${ing.color}"></span>` : '';
 
     const row = document.createElement('div');
     row.className = 'mep-add-row';
     row.innerHTML = `
-      <span class="mep-add-name">${escapeHtml(ing.name)}</span>
+      <span class="mep-add-name">${dot}${escapeHtml(ing.name)}</span>
       <button type="button" class="mep-add-btn" ${already ? 'disabled' : ''} aria-label="Add to prep list">${already ? '&check;' : '+'}</button>
     `;
     if (!already) {
-      row.querySelector('.mep-add-btn').addEventListener('click', () => addToBeforeList(ing.name, ing.unit));
+      row.querySelector('.mep-add-btn').addEventListener('click', () => addToBeforeList(ing.name, ing.unit, ing.color));
     }
     mepAfterListEl.appendChild(row);
   });
 }
 
-function addToBeforeList(name, unit) {
+// New items inherit the color the ingredient already has in its recipe
+// (if any) as a starting "container" tag — editable afterward from the
+// Before list, independent of the recipe from then on.
+function addToBeforeList(name, unit, color) {
   const key = name.trim().toLowerCase();
   if (mepBefore.some(i => i.name.trim().toLowerCase() === key)) return;
-  const items = [...mepBefore, { id: uid(), name: name.trim(), amount: '', unit: unit || '' }];
+  const items = [...mepBefore, { id: uid(), name: name.trim(), amount: '', unit: unit || '', color: color || '' }];
   RailDB.setMepList(items);
 }
 
@@ -704,7 +737,10 @@ function addIngredientRow(name = '', amount = '', unit = '', color = '') {
   row.querySelector('.row-remove').addEventListener('click', () => row.remove());
   row.querySelector('.ing-color-btn').addEventListener('click', (e) => {
     e.stopPropagation();
-    toggleColorPicker(row);
+    toggleColorPicker(row, row.dataset.color || '', (color) => {
+      row.dataset.color = color;
+      row.querySelector('.ing-color-btn').style.background = color || '';
+    });
   });
   row.querySelector('.ing-mep-btn').addEventListener('click', (e) => {
     e.stopPropagation();
@@ -764,36 +800,36 @@ function addSeparatorRow(label = '') {
   ingredientRows.appendChild(row);
 }
 
-function toggleColorPicker(row) {
+// Generic color-swatch picker, anchored to `row` (which must be
+// position:relative). `currentColor` is the color to show pre-selected;
+// `onSelect(color)` fires with the picked hex (or '' for "no color") and
+// is left to decide how/where that gets persisted — the ingredient-row
+// form field and a MEP row's synced Firestore item both reuse this.
+function toggleColorPicker(row, currentColor, onSelect) {
   const alreadyOpenOnThisRow = openColorPickerRow === row;
   closeColorPicker();
   if (alreadyOpenOnThisRow) return;
 
   const picker = document.createElement('div');
   picker.className = 'color-picker';
-  const currentColor = row.dataset.color || '';
   picker.innerHTML = `
     <button type="button" class="none-swatch" aria-label="No color">&times;</button>
     ${INGREDIENT_COLORS.map(c => `<button type="button" class="swatch${c === currentColor ? ' selected' : ''}" style="background:${c}" data-color="${c}" aria-label="Set color"></button>`).join('')}
   `;
   picker.querySelector('.none-swatch').addEventListener('click', (e) => {
     e.stopPropagation();
-    setIngredientColor(row, '');
+    onSelect('');
+    closeColorPicker();
   });
   picker.querySelectorAll('.swatch').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      setIngredientColor(row, btn.dataset.color);
+      onSelect(btn.dataset.color);
+      closeColorPicker();
     });
   });
   row.appendChild(picker);
   openColorPickerRow = row;
-}
-
-function setIngredientColor(row, color) {
-  row.dataset.color = color;
-  row.querySelector('.ing-color-btn').style.background = color || '';
-  closeColorPicker();
 }
 
 function closeColorPicker() {
