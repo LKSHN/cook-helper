@@ -432,6 +432,36 @@ button, input, select, textarea{ font-family:inherit; }
   color:var(--text-dim); font-size:14px; text-align:center; padding:40px 20px;
 }
 
+/* Possible-duplicate ingredient banner + review panel */
+.dup-banner{
+  flex-shrink:0; display:block; width:calc(100% - 32px); text-align:left;
+  background:var(--surface); border:1px solid var(--amber); color:var(--amber);
+  font-size:13px; padding:10px 14px; border-radius:9px;
+  margin:8px 16px 0; cursor:pointer;
+}
+.dup-banner[hidden]{ display:none; }
+
+.dup-panel{
+  max-width:520px; margin:0 auto;
+  padding:16px 20px calc(40px + var(--safe-bottom));
+}
+.header-spacer{ width:24px; }
+
+.dup-group{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; padding:12px; margin-bottom:12px;
+}
+.dup-variants{ display:flex; flex-direction:column; gap:4px; margin-bottom:10px; }
+.dup-variant{
+  display:flex; align-items:baseline; gap:8px; cursor:pointer;
+  padding:7px 8px; border-radius:7px;
+}
+.dup-variant.selected{ background:var(--accent-dim); }
+.dup-variant input{ margin:0; accent-color:var(--accent); }
+.dup-variant-name{ font-size:14.5px; }
+.dup-variant-meta{ font-size:12px; color:var(--text-dim); }
+.dup-merge-btn{ width:100%; text-align:center; margin-top:0; }
+
 .mep-row{
   display:flex; align-items:center; gap:10px; position:relative;
   background:var(--surface); border:1px solid var(--border);

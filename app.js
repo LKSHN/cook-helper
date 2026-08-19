@@ -52,6 +52,11 @@ const fPhotoInput = document.getElementById('fPhotoInput');
 const lightboxOverlay = document.getElementById('lightboxOverlay');
 const lightboxImg = document.getElementById('lightboxImg');
 
+const dupBanner = document.getElementById('dupBanner');
+const dupOverlay = document.getElementById('dupOverlay');
+const dupClose = document.getElementById('dupClose');
+const dupList = document.getElementById('dupList');
+
 // Photo state for the form currently open. originalPhotoPaths tracks what's
 // actually persisted on the recipe, so we know which Storage deletes are
 // safe to do immediately (never-saved uploads) vs. must wait until Save is
@@ -339,7 +344,7 @@ function renderMep() {
   mepAfterListEl.hidden = mepMode !== 'after';
   mepSortTabs.hidden = mepMode !== 'before';
   mepAfterSortTabs.hidden = mepMode !== 'after';
-  if (mepMode === 'before') renderMepBefore();
+  if (mepMode === 'before') { updateDupBanner(); renderMepBefore(); }
   else renderMepAfter();
 }
 
@@ -440,6 +445,7 @@ mepAfterSortTabs.addEventListener('click', (e) => {
 function renderMepAfter() {
   mepAfterListEl.innerHTML = '';
   openIngredientPickerRow = null;
+  updateDupBanner();
   const items = sortedAfterItems(aggregatedIngredients());
   if (!items.length) {
     mepAfterListEl.innerHTML = '<div class="mep-empty">No ingredients yet.<br>Add some recipes on the Recap tab first.</div>';
@@ -489,6 +495,156 @@ function setIngredientColorEverywhere(name, color) {
     };
     RailDB.put(updated);
   });
+}
+
+// ---- Possible-duplicate ingredient detection ----
+// The app already treats names as the same ingredient once trimmed and
+// lowercased (existingKey) — that's what aggregatedIngredients, the MEP
+// exclusion list, and setIngredientColorEverywhere all key off. What slips
+// through that is real spelling variance: accents, doubled-up whitespace,
+// or a trailing French/English plural "s" ("Rillette" vs "Rillettes").
+// fuzzyKey folds those away too, purely to *detect* likely near-misses —
+// existingKey stays the source of truth for what the rest of the app
+// considers identical.
+function existingKey(name) {
+  return (name || '').trim().toLowerCase();
+}
+
+function stripAccents(str) {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function fuzzyKey(name) {
+  let s = stripAccents(existingKey(name)).replace(/\s+/g, ' ');
+  if (s.length > 3 && s.endsWith('s') && !s.endsWith('ss')) s = s.slice(0, -1);
+  return s;
+}
+
+// One entry per distinct existingKey currently in use, grouped by fuzzyKey.
+// Only groups with 2+ distinct existingKeys are real candidates — the app
+// doesn't already treat those as the same ingredient.
+function findDuplicateGroups() {
+  const byExisting = new Map();
+  recipes.forEach(r => {
+    realIngredients(r).forEach(ing => {
+      const name = (ing.name || '').trim();
+      if (!name) return;
+      const key = existingKey(name);
+      if (!byExisting.has(key)) byExisting.set(key, { key, name, count: 0, recipeNames: new Set() });
+      const entry = byExisting.get(key);
+      entry.count++;
+      entry.recipeNames.add(r.name);
+    });
+  });
+
+  const byFuzzy = new Map();
+  byExisting.forEach((entry) => {
+    const fk = fuzzyKey(entry.name);
+    if (!byFuzzy.has(fk)) byFuzzy.set(fk, []);
+    byFuzzy.get(fk).push({ ...entry, recipeNames: [...entry.recipeNames] });
+  });
+
+  return [...byFuzzy.values()]
+    .filter(group => group.length > 1)
+    .map(group => group.sort((a, b) => b.count - a.count))
+    .sort((a, b) => a[0].name.localeCompare(b[0].name));
+}
+
+function updateDupBanner() {
+  if (!(activeView === 'mep' && mepMode === 'after')) { dupBanner.hidden = true; return; }
+  const groups = findDuplicateGroups();
+  if (!groups.length) { dupBanner.hidden = true; return; }
+  dupBanner.hidden = false;
+  dupBanner.textContent = `⚠ ${groups.length} possible duplicate ingredient${groups.length > 1 ? 's' : ''} — Review`;
+}
+
+dupBanner.addEventListener('click', () => {
+  renderDupList();
+  pushOverlayState();
+  dupOverlay.hidden = false;
+});
+dupClose.addEventListener('click', closeOverlay);
+
+function renderDupList() {
+  const groups = findDuplicateGroups();
+  dupList.innerHTML = '';
+  if (!groups.length) {
+    dupList.innerHTML = '<div class="mep-empty">No duplicates found.<br>Nice and tidy.</div>';
+    return;
+  }
+
+  groups.forEach((group, idx) => {
+    const card = document.createElement('div');
+    card.className = 'dup-group';
+    card.innerHTML = `
+      <div class="dup-variants">
+        ${group.map((v, i) => `
+          <label class="dup-variant${i === 0 ? ' selected' : ''}">
+            <input type="radio" name="dup-${idx}" value="${escapeHtml(v.name)}" ${i === 0 ? 'checked' : ''}>
+            <span class="dup-variant-name">${escapeHtml(v.name)}</span>
+            <span class="dup-variant-meta">${v.count} use${v.count > 1 ? 's' : ''} · ${escapeHtml([...v.recipeNames].slice(0, 2).join(', '))}${v.recipeNames.length > 2 ? '…' : ''}</span>
+          </label>
+        `).join('')}
+      </div>
+      <button type="button" class="btn-secondary dup-merge-btn">Merge into one</button>
+    `;
+    card.querySelectorAll('.dup-variant input').forEach(input => {
+      input.addEventListener('change', () => {
+        card.querySelectorAll('.dup-variant').forEach(label => {
+          label.classList.toggle('selected', label.querySelector('input').checked);
+        });
+      });
+    });
+    card.querySelector('.dup-merge-btn').addEventListener('click', async () => {
+      const chosen = card.querySelector(`input[name="dup-${idx}"]:checked`).value;
+      if (!confirm(`Merge these into "${chosen}"? This renames the ingredient in every recipe that uses it.`)) return;
+      await mergeIngredientVariants(group, chosen);
+      showToast(`Merged into "${chosen}"`);
+      renderDupList();
+    });
+    dupList.appendChild(card);
+  });
+}
+
+// Rewrites every variant in `group` (except whichever one matches
+// `canonicalName`) to the canonical spelling — in every recipe, and in the
+// Before list / shared MEP exclusion list if they reference a stale name.
+// Colors are left alone: the After list's own color swatch already covers
+// that, independently of naming.
+async function mergeIngredientVariants(group, canonicalName) {
+  const canonicalKey = existingKey(canonicalName);
+  const staleKeys = new Set(group.map(v => v.key).filter(k => k !== canonicalKey));
+  if (!staleKeys.size) return;
+
+  const affected = recipes.filter(r => realIngredients(r).some(i => staleKeys.has(existingKey(i.name))));
+  await Promise.all(affected.map(r => RailDB.put({
+    ...r,
+    ingredients: (r.ingredients || []).map(i =>
+      i.type !== 'separator' && staleKeys.has(existingKey(i.name)) ? { ...i, name: canonicalName } : i
+    )
+  })));
+
+  const touchesBeforeList = mepBefore.some(i => staleKeys.has(existingKey(i.name)) || existingKey(i.name) === canonicalKey);
+  if (touchesBeforeList) {
+    let keptCanonical = false;
+    const renamed = [];
+    mepBefore.forEach(i => {
+      const key = existingKey(i.name);
+      if (staleKeys.has(key) || key === canonicalKey) {
+        if (keptCanonical) return; // drop the duplicate — first occurrence wins
+        keptCanonical = true;
+        renamed.push(staleKeys.has(key) ? { ...i, name: canonicalName } : i);
+      } else {
+        renamed.push(i);
+      }
+    });
+    await RailDB.setMepList(renamed);
+  }
+
+  if (mepExcludedNames.some(n => staleKeys.has(n))) {
+    const next = [...new Set(mepExcludedNames.map(n => (staleKeys.has(n) ? canonicalKey : n)))];
+    await RailDB.setMepExclusions(next);
+  }
 }
 
 // Tapping an ingredient's name in the After list opens a small popover
@@ -566,6 +722,7 @@ function pushOverlayState() {
 function hideOverlays() {
   formOverlay.hidden = true;
   lightboxOverlay.hidden = true;
+  dupOverlay.hidden = true;
 }
 
 function closeOverlay() {

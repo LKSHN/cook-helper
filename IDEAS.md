@@ -39,3 +39,5 @@ When you want one built, just point me at it (or say "build the next one").
 - MEP Before list: removed the unit dropdown from each row (qty field stays) — it wasn't pulling its weight next to the free-text amount.
 
 - MEP After list: the color dot is now an editable swatch button, same as the Before list's — changing it there updates that ingredient's container color across every recipe that uses it. Colors already set on Before-list items stay independent once added, as before.
+
+- Duplicate ingredient detection: the After tab now flags likely-duplicate ingredient names it wouldn't already merge on its own — accents, extra spaces, or a trailing French/English plural "s" (e.g. "Ciboulette" vs "Ciboulettes"). A banner appears when any are found; tapping it opens a review list per group, pick which spelling to keep and merge — renames the ingredient in every recipe that uses it, and folds matching Before-list items / MEP exclusions into the kept spelling too.

@@ -74,6 +74,8 @@
       <button class="mep-sort-tab" data-sort="container">By container</button>
     </nav>
 
+    <button type="button" id="dupBanner" class="dup-banner" hidden></button>
+
     <div id="mepBeforeList" class="mep-list"></div>
     <div id="mepAfterList" class="mep-list" hidden></div>
   </div>
@@ -134,6 +136,18 @@
 <!-- Photo lightbox -->
 <div id="lightboxOverlay" class="overlay lightbox-overlay" hidden>
   <img id="lightboxImg" class="lightbox-img" alt="">
+</div>
+
+<!-- Possible-duplicate ingredient review -->
+<div id="dupOverlay" class="overlay" hidden>
+  <div class="dup-panel">
+    <div class="form-header">
+      <button type="button" id="dupClose" class="btn-close" aria-label="Close">&times;</button>
+      <h2>Possible duplicates</h2>
+      <span class="header-spacer"></span>
+    </div>
+    <div id="dupList"></div>
+  </div>
 </div>
 
 <div id="toast" class="toast" hidden></div>
