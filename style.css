@@ -463,9 +463,25 @@ button, input, select, textarea{ font-family:inherit; }
 .mep-add-row{
   display:flex; align-items:center; justify-content:space-between; gap:10px;
   background:var(--surface); border:1px solid var(--border);
-  border-radius:10px; padding:12px;
+  border-radius:10px; padding:12px; position:relative;
 }
 .mep-add-name{ flex:1; min-width:0; font-size:14.5px; display:flex; align-items:center; }
+.mep-add-name.clickable{ cursor:pointer; }
+.mep-add-name.clickable:active{ opacity:0.7; }
+
+/* Popover listing the recipe(s) an After-list ingredient belongs to —
+   tap one to jump straight into its edit form. */
+.recipe-picker{
+  position:absolute; top:100%; left:12px; right:12px; margin-top:4px; z-index:10;
+  display:flex; flex-direction:column; gap:2px; max-height:220px; overflow-y:auto;
+  background:var(--surface-raised); border:1px solid var(--border);
+  border-radius:10px; padding:6px; box-shadow:0 8px 24px rgba(0,0,0,0.35);
+}
+.recipe-picker-item{
+  text-align:left; background:none; border:none; color:var(--text);
+  font-size:13.5px; padding:9px 10px; border-radius:7px; cursor:pointer;
+}
+.recipe-picker-item:active{ background:var(--surface); }
 .mep-add-btn{
   flex:0 0 auto; width:32px; height:32px; border-radius:8px;
   background:var(--accent); color:#0B1620; border:none;

@@ -416,11 +416,16 @@ function aggregatedIngredients() {
     realIngredients(r).forEach(ing => {
       if (isMepExcluded(ing.name)) return;
       const key = (ing.name || '').trim().toLowerCase();
-      if (!key || map.has(key)) return;
-      map.set(key, { name: ing.name.trim(), unit: ing.unit || '', color: ing.color || '' });
+      if (!key) return;
+      if (!map.has(key)) {
+        map.set(key, { name: ing.name.trim(), unit: ing.unit || '', color: ing.color || '', recipeIds: new Set() });
+      }
+      map.get(key).recipeIds.add(r.id);
     });
   });
-  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return [...map.values()]
+    .map(v => ({ ...v, recipeIds: [...v.recipeIds] }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // 'name' is aggregatedIngredients()'s default alphabetical order;
@@ -443,6 +448,7 @@ mepAfterSortTabs.addEventListener('click', (e) => {
 
 function renderMepAfter() {
   mepAfterListEl.innerHTML = '';
+  openIngredientPickerRow = null;
   const items = sortedAfterItems(aggregatedIngredients());
   if (!items.length) {
     mepAfterListEl.innerHTML = '<div class="mep-empty">No ingredients yet.<br>Add some recipes on the Recap tab first.</div>';
@@ -457,15 +463,58 @@ function renderMepAfter() {
     const row = document.createElement('div');
     row.className = 'mep-add-row';
     row.innerHTML = `
-      <span class="mep-add-name">${dot}${escapeHtml(ing.name)}</span>
+      <span class="mep-add-name clickable">${dot}${escapeHtml(ing.name)}</span>
       <button type="button" class="mep-add-btn" ${already ? 'disabled' : ''} aria-label="Add to prep list">${already ? '&check;' : '+'}</button>
     `;
+    row.querySelector('.mep-add-name').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const matches = recipes.filter(r => ing.recipeIds.includes(r.id));
+      toggleIngredientRecipePicker(row, matches);
+    });
     if (!already) {
       row.querySelector('.mep-add-btn').addEventListener('click', () => addToBeforeList(ing.name, ing.unit, ing.color));
     }
     mepAfterListEl.appendChild(row);
   });
 }
+
+// Tapping an ingredient's name in the After list opens a small popover
+// listing the recipe(s) it belongs to — tap one to jump straight into its
+// edit form. Always shown (even for a single match) so the interaction is
+// consistent regardless of how many recipes share the ingredient.
+let openIngredientPickerRow = null;
+
+function toggleIngredientRecipePicker(row, recipeMatches) {
+  const alreadyOpenOnThisRow = openIngredientPickerRow === row;
+  closeIngredientRecipePicker();
+  if (alreadyOpenOnThisRow) return;
+
+  const picker = document.createElement('div');
+  picker.className = 'recipe-picker';
+  picker.innerHTML = recipeMatches
+    .map(r => `<button type="button" class="recipe-picker-item" data-id="${r.id}">${escapeHtml(r.name)}</button>`)
+    .join('');
+  picker.querySelectorAll('.recipe-picker-item').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeIngredientRecipePicker();
+      openForm(btn.dataset.id);
+    });
+  });
+  row.appendChild(picker);
+  openIngredientPickerRow = row;
+}
+
+function closeIngredientRecipePicker() {
+  if (!openIngredientPickerRow) return;
+  const picker = openIngredientPickerRow.querySelector('.recipe-picker');
+  if (picker) picker.remove();
+  openIngredientPickerRow = null;
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.recipe-picker') && !e.target.closest('.mep-add-name')) closeIngredientRecipePicker();
+});
 
 // New items inherit the color the ingredient already has in its recipe
 // (if any) as a starting "container" tag — editable afterward from the

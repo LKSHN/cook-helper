@@ -33,3 +33,5 @@ When you want one built, just point me at it (or say "build the next one").
 - MEP container colors: Before-list items have a color swatch (the same 8-color palette used on recipe ingredients) marking which container/bin they go in — new items inherit the color from their recipe ingredient as a starting default, editable afterward independent of the recipe. Added a sort toggle to the Before list ("Order added" / "By container") to group prepped items by that color. Time-limit/expiry tracking per item was discussed but held off for now.
 
 - MEP After sort: added the same "By container" sort toggle to the After tab (alongside its default Alphabetical order), grouping the source ingredient list by the recipe's color tag — same palette-order grouping logic as the Before list, so the two stay consistent.
+
+- Edit recipe from MEP After list: tapping an ingredient's name in the After tab opens a small popover listing every recipe that uses it — tap one to jump straight into its edit form. Shown consistently even when only one recipe matches, so the interaction never changes shape.
