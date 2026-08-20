@@ -23,6 +23,16 @@ const recipesRef = firestore.collection('recipes');
 const mepBeforeRef = firestore.collection('mep').doc('beforeList');
 const mepExclusionsRef = firestore.collection('mep').doc('excludedIngredients');
 
+// Schema v2 (see IDEAS.md "Data structure"): a normalized `ingredients`
+// collection is the canonical record for a name/color/prepColor/mep flag,
+// referenced by id from both recipes and mepBeforeItems, instead of that
+// data being embedded and duplicated across every recipe. Rolling out in
+// stages — this collection and the migration that populates it land first,
+// inert until later work switches the read/write paths over to it.
+const ingredientsRef = firestore.collection('ingredients');
+const mepBeforeItemsRef = firestore.collection('mepBeforeItems');
+const schemaMigrationRef = firestore.collection('migrations').doc('schemaV2');
+
 const RailDB = {
   // Subscribes to live changes; calls cb(recipes) immediately and on every
   // local or remote change. Returns an unsubscribe function.
@@ -69,5 +79,38 @@ const RailDB = {
   },
   async setMepExclusions(names) {
     await mepExclusionsRef.set({ names });
+  },
+  // Canonical ingredient records (schema v2) — not yet read by the UI;
+  // populated by the one-time migration in app.js.
+  onChangeIngredients(cb) {
+    return ingredientsRef.onSnapshot((snap) => {
+      cb(snap.docs.map((d) => d.data()));
+    });
+  },
+  async putIngredient(ingredient) {
+    await ingredientsRef.doc(ingredient.id).set(ingredient);
+    return ingredient;
+  },
+  // MEP before-list items as individual documents (schema v2) instead of
+  // one array inside a single doc — avoids two devices editing different
+  // items at once clobbering each other's write.
+  onChangeMepBeforeItems(cb) {
+    return mepBeforeItemsRef.onSnapshot((snap) => {
+      cb(snap.docs.map((d) => d.data()));
+    });
+  },
+  async putMepBeforeItem(item) {
+    await mepBeforeItemsRef.doc(item.id).set(item);
+    return item;
+  },
+  async removeMepBeforeItem(id) {
+    await mepBeforeItemsRef.doc(id).delete();
+  },
+  async isSchemaV2Migrated() {
+    const snap = await schemaMigrationRef.get();
+    return snap.exists;
+  },
+  async markSchemaV2Migrated() {
+    await schemaMigrationRef.set({ migratedAt: Date.now() });
   }
 };

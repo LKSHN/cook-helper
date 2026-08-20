@@ -16,6 +16,8 @@ let mepExcludedNames = [];
 let mepExclusionsDocExists = null;
 let recipesEverLoaded = false;
 let mepMigrationDone = false;
+let mepBeforeEverLoaded = false;
+let schemaV2MigrationStarted = false;
 
 const cardList = document.getElementById('cardList');
 const emptyState = document.getElementById('emptyState');
@@ -109,13 +111,16 @@ function loadRecipes() {
     render();
     if (activeView === 'mep' && mepMode === 'after') renderMep();
     maybeMigrateLegacyMepFlags();
+    maybeMigrateSchemaV2();
   });
 }
 
 function loadMep() {
   RailDB.onChangeMepList((items) => {
     mepBefore = items;
+    mepBeforeEverLoaded = true;
     if (activeView === 'mep') renderMep();
+    maybeMigrateSchemaV2();
   });
 }
 
@@ -128,9 +133,79 @@ function loadMepExclusions() {
     mepExcludedNames = names;
     mepExclusionsDocExists = exists;
     maybeMigrateLegacyMepFlags();
+    maybeMigrateSchemaV2();
     syncAllMepButtons();
     if (activeView === 'mep' && mepMode === 'after') renderMepAfter();
   });
+}
+
+// ---- Schema v2 migration (see IDEAS.md "Data structure") ----
+// Builds the new canonical `ingredients` collection and per-item
+// `mepBeforeItems` docs from the current embedded/array-doc data, purely
+// additively — nothing here rewrites a recipe doc or the old mep/beforeList
+// doc, so the rest of the app keeps reading/writing exactly as it does
+// today until later work switches those paths over to the new collections.
+//
+// Runs once per deploy (guarded by the schemaV2 migration doc's existence),
+// after recipes, the before list, and the exclusion list have all loaded at
+// least once — registerIngredient needs isMepExcluded, which needs the
+// exclusion list. Like the legacy-mep-flag migration above, this doesn't
+// guard against two devices racing to run it the very first time; at this
+// app's scale (one small team, one migration, one-time) that's an accepted
+// risk rather than something worth a distributed lock for.
+async function maybeMigrateSchemaV2() {
+  if (schemaV2MigrationStarted) return;
+  if (!recipesEverLoaded || !mepBeforeEverLoaded || mepExclusionsDocExists === null) return;
+  schemaV2MigrationStarted = true;
+  if (await RailDB.isSchemaV2Migrated()) return;
+
+  // Dedupe by fuzzyKey (the same folding the duplicate-detection banner
+  // uses) so migration doesn't reintroduce spelling variants as separate
+  // ingredients. First-seen name/color wins as the canonical record.
+  const byFuzzy = new Map();
+  const existingToFuzzy = new Map();
+
+  function registerIngredient(name, color, mepIncluded) {
+    const trimmed = (name || '').trim();
+    if (!trimmed) return null;
+    const fk = fuzzyKey(trimmed);
+    if (!byFuzzy.has(fk)) {
+      byFuzzy.set(fk, {
+        id: uid(),
+        name: trimmed,
+        color: color || '',
+        prepColor: '',
+        mep: mepIncluded !== false,
+        defaultUnit: ''
+      });
+    }
+    existingToFuzzy.set(existingKey(trimmed), fk);
+    return byFuzzy.get(fk);
+  }
+
+  recipes.forEach(r => realIngredients(r).forEach(ing => {
+    registerIngredient(ing.name, ing.color, !isMepExcluded(ing.name));
+  }));
+  // Also fold in Before-list items with no recipe left using that name
+  // (e.g. added once, the recipe since deleted) — they still need a
+  // canonical ingredient record so the migrated mepBeforeItems doc has an
+  // ingredientId to point at.
+  mepBefore.forEach(item => registerIngredient(item.name, item.color, true));
+
+  await Promise.all([...byFuzzy.values()].map(ing => RailDB.putIngredient(ing)));
+
+  await Promise.all(mepBefore.map(item => {
+    const canonical = byFuzzy.get(existingToFuzzy.get(existingKey(item.name)));
+    return RailDB.putMepBeforeItem({
+      id: item.id,
+      ingredientId: canonical.id,
+      amount: item.amount || '',
+      unit: item.unit || '',
+      addedAt: Date.now()
+    });
+  }));
+
+  await RailDB.markSchemaV2Migrated();
 }
 
 // One-time migration from the old per-recipe-ingredient `mep: false` flag
