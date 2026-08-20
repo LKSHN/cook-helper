@@ -3,6 +3,8 @@
 Drop anything here — one line or a whole paragraph, doesn't need to be polished.
 When you want one built, just point me at it (or say "build the next one").
 
+- Changes: Change container sorting by color sorting (which is the same idea but a different name) 
+
 - Shop tab: currently just a placeholder ("Shop is coming soon.") — build out what it should actually do
 
 ## Done
