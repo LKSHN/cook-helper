@@ -20,20 +20,13 @@ firestore.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 const storage = firebase.storage();
 
 const recipesRef = firestore.collection('recipes');
-const mepBeforeRef = firestore.collection('mep').doc('beforeList');
-const mepExclusionsRef = firestore.collection('mep').doc('excludedIngredients');
 
-// Schema v2 (see IDEAS.md "Data structure"): a normalized `ingredients`
-// collection is the canonical record for a name/color/prepColor/mep flag,
-// referenced by id from both recipes and mepBeforeItems, instead of that
-// data being embedded and duplicated across every recipe. Rolling out in
-// stages — this collection and the migration that populates it land first,
-// inert until later work switches the read/write paths over to it.
+// A normalized `ingredients` collection is the canonical record for a
+// name/color/prepColor/mep flag, referenced by id from both recipes and
+// mepBeforeItems, instead of that data being embedded and duplicated
+// across every recipe (see IDEAS.md "Data structure").
 const ingredientsRef = firestore.collection('ingredients');
 const mepBeforeItemsRef = firestore.collection('mepBeforeItems');
-const schemaMigrationRef = firestore.collection('migrations').doc('schemaV2');
-const schemaBackfillRef = firestore.collection('migrations').doc('schemaV2Backfill');
-const schemaBeforeSyncRef = firestore.collection('migrations').doc('schemaV2BeforeSync');
 
 const RailDB = {
   // Subscribes to live changes; calls cb(recipes) immediately and on every
@@ -61,29 +54,7 @@ const RailDB = {
   async deletePhoto(path) {
     await storage.ref(path).delete().catch(() => {});
   },
-  // MEP "before service" prep checklist — one shared doc, synced like recipes.
-  onChangeMepList(cb) {
-    return mepBeforeRef.onSnapshot((snap) => {
-      cb((snap.data() && snap.data().items) || []);
-    });
-  },
-  async setMepList(items) {
-    await mepBeforeRef.set({ items });
-  },
-  // Ingredient names excluded from MEP, shared across every recipe that
-  // uses them (e.g. salt, water) — one doc, same pattern as the before
-  // list. cb's second arg tells the caller whether the doc exists yet, so
-  // a one-time migration from the old per-recipe flag can run exactly once.
-  onChangeMepExclusions(cb) {
-    return mepExclusionsRef.onSnapshot((snap) => {
-      cb((snap.data() && snap.data().names) || [], snap.exists);
-    });
-  },
-  async setMepExclusions(names) {
-    await mepExclusionsRef.set({ names });
-  },
-  // Canonical ingredient records (schema v2) — not yet read by the UI;
-  // populated by the one-time migration in app.js.
+  // Canonical ingredient records — see IDEAS.md "Data structure".
   onChangeIngredients(cb) {
     return ingredientsRef.onSnapshot((snap) => {
       cb(snap.docs.map((d) => d.data()));
@@ -110,34 +81,5 @@ const RailDB = {
   },
   async removeMepBeforeItem(id) {
     await mepBeforeItemsRef.doc(id).delete();
-  },
-  async isSchemaV2Migrated() {
-    const snap = await schemaMigrationRef.get();
-    return snap.exists;
-  },
-  async markSchemaV2Migrated() {
-    await schemaMigrationRef.set({ migratedAt: Date.now() });
-  },
-  // Separate marker from schemaV2Migrated above: that one seeds the
-  // `ingredients` collection without touching recipe docs; this one tracks
-  // the follow-up pass that attaches ingredientId onto every recipe's
-  // ingredient entries so the MEP After list can rely on it being there.
-  async isIngredientIdBackfillDone() {
-    const snap = await schemaBackfillRef.get();
-    return snap.exists;
-  },
-  async markIngredientIdBackfillDone() {
-    await schemaBackfillRef.set({ migratedAt: Date.now() });
-  },
-  // Tracks the one-time pass that makes mepBeforeItems authoritative again
-  // relative to the legacy mep/beforeList doc, which kept being the one
-  // actually read/written by the UI through PR 2 and PR 3 (neither touched
-  // the Before list). See maybeSyncMepBeforeItems in app.js.
-  async isMepBeforeSynced() {
-    const snap = await schemaBeforeSyncRef.get();
-    return snap.exists;
-  },
-  async markMepBeforeSynced() {
-    await schemaBeforeSyncRef.set({ migratedAt: Date.now() });
   }
 };
