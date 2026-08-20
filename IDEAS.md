@@ -11,8 +11,6 @@ When you want one built, just point me at it (or say "build the next one").
 
 - Recipe edit view: I want to be able to change the two colors we have for each ingredient (one is for the container color, which is used in the recap view and the after mep list, and the other which is more about the time needed to prep them so it sort it out, that will be used for the before mep list)
 
-- MEP After List: I want to have the ability to change caracteristics of an ingredient 
-
 - Data structure: Want to work on something that could scale later on :
     - maybe something more "proper" like a table for recipes, for the recap view, that has ingredients linked into another table for them that will be used for the mep list
     - a table for the mep before list would be cleaner i think
@@ -55,3 +53,5 @@ When you want one built, just point me at it (or say "build the next one").
 - MEP After list: the color dot is now an editable swatch button, same as the Before list's — changing it there updates that ingredient's container color across every recipe that uses it. Colors already set on Before-list items stay independent once added, as before.
 
 - Duplicate ingredient detection: the After tab now flags likely-duplicate ingredient names it wouldn't already merge on its own — accents, extra spaces, or a trailing French/English plural "s" (e.g. "Ciboulette" vs "Ciboulettes"). A banner appears when any are found; tapping it opens a review list per group, pick which spelling to keep and merge — renames the ingredient in every recipe that uses it, and folds matching Before-list items / MEP exclusions into the kept spelling too.
+
+- MEP After quick rename: tapping an ingredient's name in the After list now shows a "Rename" entry above the recipe-jump list — fixes a single typo directly (prompts for the new spelling, renames it everywhere) without going through the full duplicate-merge review flow.

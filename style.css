@@ -506,6 +506,10 @@ button, input, select, textarea{ font-family:inherit; }
   text-align:left; background:none; border:none; color:var(--text);
   font-size:13.5px; padding:9px 10px; border-radius:7px; cursor:pointer;
 }
+.recipe-picker-rename{
+  color:var(--accent); border-bottom:1px solid var(--border);
+  border-radius:7px 7px 0 0; margin-bottom:2px; padding-bottom:11px;
+}
 .recipe-picker-item:active{ background:var(--surface); }
 .mep-add-btn{
   flex:0 0 auto; width:32px; height:32px; border-radius:8px;
