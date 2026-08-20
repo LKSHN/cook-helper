@@ -9,10 +9,6 @@ When you want one built, just point me at it (or say "build the next one").
 
 - Recipe edit view: I want to be able to change the two colors we have for each ingredient (one is for the container color, which is used in the recap view and the after mep list, and the other which is more about the time needed to prep them so it sort it out, that will be used for the before mep list)
 
-- Data structure: Want to work on something that could scale later on :
-    - maybe something more "proper" like a table for recipes, for the recap view, that has ingredients linked into another table for them that will be used for the mep list
-    - a table for the mep before list would be cleaner i think
-
 - Shop tab: currently just a placeholder ("Shop is coming soon.") — build out what it should actually do
 
 ## Done
@@ -55,3 +51,5 @@ When you want one built, just point me at it (or say "build the next one").
 - Changes sort name: renamed the "By container" sort option to "By color" on both the MEP Before and After tabs — same sort, clearer label.
 
 - MEP After quick rename: tapping an ingredient's name in the After list now shows a "Rename" entry above the recipe-jump list — fixes a single typo directly (prompts for the new spelling, renames it everywhere) without going through the full duplicate-merge review flow.
+
+- Data structure: replaced the embedded per-recipe ingredient name/color and the old array-doc Before list / name-keyed exclusion list with a normalized `ingredients` collection (canonical id/name/color/prepColor/mep/defaultUnit) and a `mepBeforeItems` collection (one doc per Before-list item), both referenced by id instead of duplicated everywhere. Migrated existing data over automatically, then dropped the legacy read/write paths once confirmed on the live data.
