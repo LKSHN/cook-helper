@@ -33,6 +33,7 @@ const ingredientsRef = firestore.collection('ingredients');
 const mepBeforeItemsRef = firestore.collection('mepBeforeItems');
 const schemaMigrationRef = firestore.collection('migrations').doc('schemaV2');
 const schemaBackfillRef = firestore.collection('migrations').doc('schemaV2Backfill');
+const schemaBeforeSyncRef = firestore.collection('migrations').doc('schemaV2BeforeSync');
 
 const RailDB = {
   // Subscribes to live changes; calls cb(recipes) immediately and on every
@@ -127,5 +128,16 @@ const RailDB = {
   },
   async markIngredientIdBackfillDone() {
     await schemaBackfillRef.set({ migratedAt: Date.now() });
+  },
+  // Tracks the one-time pass that makes mepBeforeItems authoritative again
+  // relative to the legacy mep/beforeList doc, which kept being the one
+  // actually read/written by the UI through PR 2 and PR 3 (neither touched
+  // the Before list). See maybeSyncMepBeforeItems in app.js.
+  async isMepBeforeSynced() {
+    const snap = await schemaBeforeSyncRef.get();
+    return snap.exists;
+  },
+  async markMepBeforeSynced() {
+    await schemaBeforeSyncRef.set({ migratedAt: Date.now() });
   }
 };

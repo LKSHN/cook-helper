@@ -7,7 +7,20 @@ let openCardMenuId = null;
 
 let activeView = 'recap';
 let mepMode = 'before';
+
+// MEP Before list, schema v2: one document per item (mepBeforeItems),
+// referencing a canonical ingredient by id rather than embedding its own
+// name/color. Drives the Before list UI and the After list's "already
+// added" check.
 let mepBefore = [];
+let mepBeforeItemsEverLoaded = false;
+
+// The legacy mep/beforeList array-doc. No longer read by any UI — kept
+// loaded only to feed maybeMigrateSchemaV2 (PR 1) and the one-time resync
+// below (PR 4), both one-shot migrations into the new collections.
+let legacyMepBeforeItems = [];
+let legacyMepBeforeEverLoaded = false;
+
 // Ingredient names excluded from MEP everywhere they appear, not just in
 // one recipe — see toggleMepExclusion(). mepExclusionsDocExists tracks
 // whether the shared doc exists yet, so the one-time migration below only
@@ -16,16 +29,16 @@ let mepExcludedNames = [];
 let mepExclusionsDocExists = null;
 let recipesEverLoaded = false;
 let mepMigrationDone = false;
-let mepBeforeEverLoaded = false;
 let schemaV2MigrationStarted = false;
 let ingredientsEverLoaded = false;
 let schemaV2BackfillStarted = false;
+let schemaV2BeforeSyncStarted = false;
 
 // Schema v2 canonical ingredient records (see IDEAS.md "Data structure").
-// Recap display and the recipe edit form read/write through these now;
-// the MEP After/Before lists still read the legacy embedded fields until
-// they're switched over in a later PR — see resolveIngredientDisplay and
-// the submit handler below for how both shapes coexist during the rollout.
+// Recap, the recipe edit form, and the MEP After/Before lists all read
+// and write through these now — see resolveIngredientDisplay below for
+// how recipe docs that still carry only the legacy embedded name/color
+// (not yet resaved through the new form path) keep displaying correctly.
 let ingredients = [];
 let ingredientsById = new Map();
 
@@ -126,12 +139,21 @@ function loadRecipes() {
   });
 }
 
-function loadMep() {
-  RailDB.onChangeMepList((items) => {
+function loadMepBeforeItems() {
+  RailDB.onChangeMepBeforeItems((items) => {
     mepBefore = items;
-    mepBeforeEverLoaded = true;
+    mepBeforeItemsEverLoaded = true;
     if (activeView === 'mep') renderMep();
+    maybeSyncMepBeforeItems();
+  });
+}
+
+function loadLegacyMepBefore() {
+  RailDB.onChangeMepList((items) => {
+    legacyMepBeforeItems = items;
+    legacyMepBeforeEverLoaded = true;
     maybeMigrateSchemaV2();
+    maybeSyncMepBeforeItems();
   });
 }
 
@@ -144,6 +166,7 @@ function loadIngredients() {
     syncAllMepButtons();
     if (activeView === 'mep') renderMep();
     maybeBackfillIngredientIds();
+    maybeSyncMepBeforeItems();
   });
 }
 
@@ -192,7 +215,7 @@ function loadMepExclusions() {
 // risk rather than something worth a distributed lock for.
 async function maybeMigrateSchemaV2() {
   if (schemaV2MigrationStarted) return;
-  if (!recipesEverLoaded || !mepBeforeEverLoaded || mepExclusionsDocExists === null) return;
+  if (!recipesEverLoaded || !legacyMepBeforeEverLoaded || mepExclusionsDocExists === null) return;
   schemaV2MigrationStarted = true;
   if (await RailDB.isSchemaV2Migrated()) return;
 
@@ -227,11 +250,11 @@ async function maybeMigrateSchemaV2() {
   // (e.g. added once, the recipe since deleted) — they still need a
   // canonical ingredient record so the migrated mepBeforeItems doc has an
   // ingredientId to point at.
-  mepBefore.forEach(item => registerIngredient(item.name, item.color, true));
+  legacyMepBeforeItems.forEach(item => registerIngredient(item.name, item.color, true));
 
   await Promise.all([...byFuzzy.values()].map(ing => RailDB.putIngredient(ing)));
 
-  await Promise.all(mepBefore.map(item => {
+  await Promise.all(legacyMepBeforeItems.map(item => {
     const canonical = byFuzzy.get(existingToFuzzy.get(existingKey(item.name)));
     return RailDB.putMepBeforeItem({
       id: item.id,
@@ -284,6 +307,49 @@ async function maybeBackfillIngredientIds() {
 
   await Promise.all(updates.map(r => RailDB.put(r)));
   await RailDB.markIngredientIdBackfillDone();
+}
+
+// One-time resync (PR 4): maybeMigrateSchemaV2 above seeded mepBeforeItems
+// once from whatever the legacy mep/beforeList doc held at that moment,
+// but nothing kept the two in sync afterward — PR 2/3 never touched the
+// Before list, so any add/remove/edit made through the old UI between
+// that migration and this PR's deploy only reached the legacy doc. This
+// pass makes mepBeforeItems authoritative again: removes any
+// mepBeforeItems doc no longer present in the legacy list, and
+// creates/updates one for every current legacy item (matching or creating
+// a canonical ingredient the same way the other migrations do — items are
+// processed sequentially so two legacy items needing the same new
+// ingredient don't create it twice). After this, the Before list reads
+// and writes mepBeforeItems exclusively; the legacy doc stays loaded only
+// to feed this one-time pass.
+async function maybeSyncMepBeforeItems() {
+  if (schemaV2BeforeSyncStarted) return;
+  if (!legacyMepBeforeEverLoaded || !mepBeforeItemsEverLoaded || !ingredientsEverLoaded) return;
+  schemaV2BeforeSyncStarted = true;
+  if (await RailDB.isMepBeforeSynced()) return;
+
+  const currentLegacyIds = new Set(legacyMepBeforeItems.map(i => i.id));
+  const staleDocs = mepBefore.filter(i => !currentLegacyIds.has(i.id));
+  await Promise.all(staleDocs.map(i => RailDB.removeMepBeforeItem(i.id)));
+
+  for (const item of legacyMepBeforeItems) {
+    let canonical = ingredients.find(i => existingKey(i.name) === existingKey(item.name));
+    if (!canonical) {
+      canonical = { id: uid(), name: (item.name || '').trim(), color: item.color || '', prepColor: '', mep: true, defaultUnit: '' };
+      await RailDB.putIngredient(canonical);
+      ingredients.push(canonical);
+      ingredientsById.set(canonical.id, canonical);
+    }
+    await RailDB.putMepBeforeItem({
+      id: item.id,
+      ingredientId: canonical.id,
+      amount: item.amount || '',
+      unit: item.unit || '',
+      addedAt: Date.now()
+    });
+  }
+
+  await RailDB.markMepBeforeSynced();
 }
 
 // One-time migration from the old per-recipe-ingredient `mep: false` flag
@@ -511,6 +577,15 @@ function colorSortIndex(color) {
   return i === -1 ? INGREDIENT_COLORS.length : i;
 }
 
+// A Before item's color always comes from its canonical ingredient now —
+// editing it (see renderMepBefore) is "everywhere", same as the After
+// list's color button, since color no longer has anywhere per-item to
+// live independently.
+function beforeItemColor(item) {
+  const canonical = ingredientsById.get(item.ingredientId);
+  return canonical ? (canonical.color || '') : '';
+}
+
 // 'added' keeps Firestore array order (insertion order); 'container'
 // groups items by their color tag, in palette order, with no-container
 // items last. Not persisted — purely a local view preference.
@@ -518,7 +593,7 @@ let mepBeforeSort = 'added';
 
 function sortedMepBefore() {
   if (mepBeforeSort !== 'container') return mepBefore;
-  return [...mepBefore].sort((a, b) => colorSortIndex(a.color) - colorSortIndex(b.color));
+  return [...mepBefore].sort((a, b) => colorSortIndex(beforeItemColor(a)) - colorSortIndex(beforeItemColor(b)));
 }
 
 mepSortTabs.addEventListener('click', (e) => {
@@ -537,12 +612,16 @@ function renderMepBefore() {
   }
 
   sortedMepBefore().forEach(item => {
+    const canonical = ingredientsById.get(item.ingredientId);
+    const name = canonical ? canonical.name : '';
+    const color = canonical ? (canonical.color || '') : '';
+
     const row = document.createElement('div');
     row.className = 'mep-row';
     row.innerHTML = `
       <button type="button" class="mep-check" aria-label="Mark prepped">&#10003;</button>
-      <button type="button" class="ing-color-btn" aria-label="Set container color" style="${item.color ? `background:${item.color}` : ''}"></button>
-      <span class="mep-row-name">${escapeHtml(item.name)}</span>
+      <button type="button" class="ing-color-btn" aria-label="Set container color" style="${color ? `background:${color}` : ''}"></button>
+      <span class="mep-row-name">${escapeHtml(name)}</span>
       <input type="text" class="ing-amount" placeholder="Qty" value="${escapeHtml(item.amount || '')}">
       <button type="button" class="mep-row-remove" aria-label="Remove">&times;</button>
     `;
@@ -554,7 +633,9 @@ function renderMepBefore() {
     });
     row.querySelector('.ing-color-btn').addEventListener('click', (e) => {
       e.stopPropagation();
-      toggleColorPicker(row, item.color || '', (color) => updateBeforeItem(item.id, { color }));
+      toggleColorPicker(row, color, (newColor) => {
+        if (canonical) RailDB.putIngredient({ ...canonical, color: newColor });
+      });
     });
 
     mepBeforeListEl.appendChild(row);
@@ -621,7 +702,7 @@ function renderMepAfter() {
   }
 
   items.forEach(ing => {
-    const already = mepBefore.some(i => existingKey(i.name) === existingKey(ing.name));
+    const already = mepBefore.some(i => i.ingredientId === ing.id);
 
     const row = document.createElement('div');
     row.className = 'mep-add-row';
@@ -640,7 +721,7 @@ function renderMepAfter() {
       toggleColorPicker(row, ing.color || '', (color) => RailDB.putIngredient({ ...ingredientsById.get(ing.id), color }));
     });
     if (!already) {
-      row.querySelector('.mep-add-btn').addEventListener('click', () => addToBeforeList(ing.name, ing.unit, ing.color));
+      row.querySelector('.mep-add-btn').addEventListener('click', () => addToBeforeList(ing.id, ing.unit));
     }
     mepAfterListEl.appendChild(row);
   });
@@ -756,9 +837,9 @@ function renderDupList() {
 // or a single-item group from quickRenameIngredient) into whichever one
 // matches `keepId` — repoints every recipe ingredient entry referencing
 // one of the others to keepId, then deletes the now-unused canonical
-// docs. The Before list still keys by name (not migrated until PR 4), so
-// if it has an item under one of the merged-away spellings, that gets
-// repointed too so "already added" stays correct.
+// docs. If the Before list has an item under one of the merged-away
+// ingredients, repoints that too (or drops it, if a Before item for the
+// kept ingredient already exists — no point prepping the same thing twice).
 async function mergeIngredientVariants(group, keepId) {
   const staleIds = new Set(group.map(v => v.id).filter(gid => gid !== keepId));
   if (!staleIds.size) return;
@@ -774,22 +855,15 @@ async function mergeIngredientVariants(group, keepId) {
     )
   })));
 
-  const staleNames = new Set(group.filter(v => staleIds.has(v.id)).map(v => existingKey(v.name)));
-  const touchesBeforeList = mepBefore.some(i => staleNames.has(existingKey(i.name)) || existingKey(i.name) === existingKey(keep.name));
-  if (touchesBeforeList) {
-    let keptCanonical = false;
-    const renamed = [];
-    mepBefore.forEach(i => {
-      const key = existingKey(i.name);
-      if (staleNames.has(key) || key === existingKey(keep.name)) {
-        if (keptCanonical) return; // drop the duplicate — first occurrence wins
-        keptCanonical = true;
-        renamed.push(staleNames.has(key) ? { ...i, name: keep.name } : i);
-      } else {
-        renamed.push(i);
-      }
-    });
-    await RailDB.setMepList(renamed);
+  const beforeItemsForStale = mepBefore.filter(i => staleIds.has(i.ingredientId));
+  if (beforeItemsForStale.length) {
+    if (mepBefore.some(i => i.ingredientId === keepId)) {
+      await Promise.all(beforeItemsForStale.map(i => RailDB.removeMepBeforeItem(i.id)));
+    } else {
+      const [first, ...rest] = beforeItemsForStale;
+      await RailDB.putMepBeforeItem({ ...first, ingredientId: keepId });
+      await Promise.all(rest.map(i => RailDB.removeMepBeforeItem(i.id)));
+    }
   }
 
   await Promise.all([...staleIds].map(sid => RailDB.deleteIngredient(sid)));
@@ -861,22 +935,25 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('.recipe-picker') && !e.target.closest('.mep-add-name')) closeIngredientRecipePicker();
 });
 
-// New items inherit the color the ingredient already has in its recipe
-// (if any) as a starting "container" tag — editable afterward from the
-// Before list, independent of the recipe from then on.
-function addToBeforeList(name, unit, color) {
-  const key = name.trim().toLowerCase();
-  if (mepBefore.some(i => i.name.trim().toLowerCase() === key)) return;
-  const items = [...mepBefore, { id: uid(), name: name.trim(), amount: '', unit: unit || '', color: color || '' }];
-  RailDB.setMepList(items);
+// Each doc is its own write now (mepBeforeItems), not a whole-array
+// overwrite — two devices adding/editing/removing different items at once
+// no longer clobber each other. Color isn't stored here at all: it always
+// resolves from the canonical ingredient (see beforeItemColor), so there's
+// nothing to inherit or keep independent — editing it is "everywhere",
+// same as the After list's color button.
+function addToBeforeList(ingredientId, unit) {
+  if (mepBefore.some(i => i.ingredientId === ingredientId)) return;
+  RailDB.putMepBeforeItem({ id: uid(), ingredientId, amount: '', unit: unit || '', addedAt: Date.now() });
 }
 
 function removeFromBeforeList(id) {
-  RailDB.setMepList(mepBefore.filter(i => i.id !== id));
+  RailDB.removeMepBeforeItem(id);
 }
 
 function updateBeforeItem(id, patch) {
-  RailDB.setMepList(mepBefore.map(i => (i.id === id ? { ...i, ...patch } : i)));
+  const item = mepBefore.find(i => i.id === id);
+  if (!item) return;
+  RailDB.putMepBeforeItem({ ...item, ...patch });
 }
 
 // ---- Search ----
@@ -1361,10 +1438,11 @@ recipeForm.addEventListener('submit', async (e) => {
     const unit = row.querySelector('.ing-unit').value.trim();
     const color = row.dataset.color || '';
     const ingredientId = await resolveIngredientIdForRow(row);
-    // Schema v2 rollout: ingredientId is the forward-looking reference,
-    // but name/color are kept embedded too — the MEP After/Before lists
-    // haven't been switched over to the canonical record yet and still
-    // read these directly off the recipe. Safe to drop once they have.
+    // ingredientId is the live reference every read path now uses; name/
+    // color are kept embedded alongside it only as a fallback for a
+    // recipe doc that predates schema v2 and hasn't been resaved yet (see
+    // resolveIngredientDisplay). Safe to drop once PR 5 confirms nothing
+    // still needs the fallback.
     ingredientEntries.push({ ingredientId, name, amount, unit, color });
   }
 
@@ -1417,6 +1495,7 @@ if ('caches' in window) {
 }
 
 loadRecipes();
-loadMep();
+loadMepBeforeItems();
+loadLegacyMepBefore();
 loadMepExclusions();
 loadIngredients();
