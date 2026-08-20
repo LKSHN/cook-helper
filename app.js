@@ -350,7 +350,7 @@ function renderMep() {
 
 // Palette position of a container color, for sorting groups in a stable,
 // consistent order; no-color items sort last. Shared by both the Before
-// and After "By container" sorts.
+// and After "By color" sorts.
 function colorSortIndex(color) {
   const i = INGREDIENT_COLORS.indexOf(color);
   return i === -1 ? INGREDIENT_COLORS.length : i;
