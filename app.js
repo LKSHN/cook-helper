@@ -19,6 +19,14 @@ let mepMigrationDone = false;
 let mepBeforeEverLoaded = false;
 let schemaV2MigrationStarted = false;
 
+// Schema v2 canonical ingredient records (see IDEAS.md "Data structure").
+// Recap display and the recipe edit form read/write through these now;
+// the MEP After/Before lists still read the legacy embedded fields until
+// they're switched over in a later PR — see resolveIngredientDisplay and
+// the submit handler below for how both shapes coexist during the rollout.
+let ingredients = [];
+let ingredientsById = new Map();
+
 const cardList = document.getElementById('cardList');
 const emptyState = document.getElementById('emptyState');
 const searchInput = document.getElementById('searchInput');
@@ -122,6 +130,28 @@ function loadMep() {
     if (activeView === 'mep') renderMep();
     maybeMigrateSchemaV2();
   });
+}
+
+function loadIngredients() {
+  RailDB.onChangeIngredients((data) => {
+    ingredients = data;
+    ingredientsById = new Map(data.map(i => [i.id, i]));
+    render();
+  });
+}
+
+// Resolves a recipe's embedded ingredient entry to a display-ready
+// {name, color} pair. Prefers the canonical ingredients/{id} record via
+// ingredientId (schema v2); falls back to the legacy embedded fields for
+// any recipe not yet resaved through the new write path below — both
+// shapes coexist on recipe docs during the rollout (see the submit
+// handler's comment for why).
+function resolveIngredientDisplay(ing) {
+  const canonical = ing.ingredientId ? ingredientsById.get(ing.ingredientId) : null;
+  return {
+    name: canonical ? canonical.name : (ing.name || ''),
+    color: canonical ? (canonical.color || '') : (ing.color || '')
+  };
 }
 
 function isMepExcluded(name) {
@@ -232,7 +262,8 @@ function maybeMigrateLegacyMepFlags() {
 function filteredRecipes() {
   return recipes.filter(r => {
     if (!searchTerm) return true;
-    const hay = (r.name + ' ' + (r.ingredients || []).map(i => i.name).join(' ')).toLowerCase();
+    const ingredientNames = realIngredients(r).map(i => resolveIngredientDisplay(i).name);
+    const hay = (r.name + ' ' + ingredientNames.join(' ')).toLowerCase();
     return hay.includes(searchTerm.toLowerCase());
   });
 }
@@ -373,9 +404,10 @@ function ingredientLiHtml(ing) {
   if (ing.type === 'separator') {
     return `<li class="ingredient-separator">${escapeHtml(ing.name)}</li>`;
   }
+  const { name, color } = resolveIngredientDisplay(ing);
   const qty = ing.amount ? ing.amount + ' ' + escapeHtml(ing.unit || '') : '';
-  const dot = ing.color ? `<span class="ing-dot" style="background:${ing.color}"></span>` : '';
-  return `<li><span class="ing-name-wrap">${dot}${escapeHtml(ing.name)}</span><span class="ingredient-qty">${qty}</span></li>`;
+  const dot = color ? `<span class="ing-dot" style="background:${color}"></span>` : '';
+  return `<li><span class="ing-name-wrap">${dot}${escapeHtml(name)}</span><span class="ingredient-qty">${qty}</span></li>`;
 }
 
 // ---- Station tabs (scroll-to-section anchors, not filters) ----
@@ -882,8 +914,9 @@ function openForm(id) {
     document.getElementById('fCategory').value = r.category;
     document.getElementById('fNotes').value = r.notes || '';
     (r.ingredients || []).forEach(ing => {
-      if (ing.type === 'separator') addSeparatorRow(ing.name);
-      else addIngredientRow(ing.name, ing.amount, ing.unit, ing.color);
+      if (ing.type === 'separator') { addSeparatorRow(ing.name); return; }
+      const { name, color } = resolveIngredientDisplay(ing);
+      addIngredientRow(name, ing.amount, ing.unit, color, ing.ingredientId || null);
     });
     (r.steps || []).forEach(step => addStepRow(step));
     formPhotos = (r.photos || []).slice();
@@ -1054,10 +1087,19 @@ function wireReorderButtons(row) {
   row.querySelector('.row-down').addEventListener('click', () => moveRow(row, 'down'));
 }
 
-function addIngredientRow(name = '', amount = '', unit = '', color = '') {
+// `ingredientId` (schema v2) is the canonical ingredient this row was
+// loaded as, if any — null for a brand-new row or one whose recipe hasn't
+// been resaved through the new write path yet. Kept on the row's dataset,
+// along with the name it was resolved from (boundName), so the submit
+// handler can tell whether the row is still "the same ingredient" (typed
+// name unchanged) or should look up/create a different one (typed name
+// changed) — see resolveIngredientIdForRow.
+function addIngredientRow(name = '', amount = '', unit = '', color = '', ingredientId = null) {
   const row = document.createElement('div');
   row.className = 'ingredient-row';
   row.dataset.color = color;
+  row.dataset.ingredientId = ingredientId || '';
+  row.dataset.boundName = name;
   const unitOptions = UNITS.map(u => {
     const val = u === 'None' ? '' : u;
     return `<option value="${val}" ${unit === val ? 'selected' : ''}>${u}</option>`;
@@ -1078,6 +1120,17 @@ function addIngredientRow(name = '', amount = '', unit = '', color = '') {
     toggleColorPicker(row, row.dataset.color || '', (color) => {
       row.dataset.color = color;
       row.querySelector('.ing-color-btn').style.background = color || '';
+      // Once a row is bound to a canonical ingredient, its color is
+      // shared everywhere that ingredient is used — same "everywhere"
+      // semantics as the MEP After list's color button, since color now
+      // lives on the canonical record rather than per-recipe. A row not
+      // yet bound to an id (new/unmatched) just updates its own dataset;
+      // the color reaches the canonical record when the row gets
+      // resolved to an ingredientId on save.
+      if (row.dataset.ingredientId) {
+        const current = ingredientsById.get(row.dataset.ingredientId);
+        if (current) RailDB.putIngredient({ ...current, color });
+      }
     });
   });
   row.querySelector('.ing-mep-btn').addEventListener('click', (e) => {
@@ -1199,23 +1252,70 @@ function addStepRow(text = '') {
 
 addStepBtn.addEventListener('click', () => addStepRow());
 
+// Finds or creates the canonical ingredient a row should save against.
+// If the row is still bound to the id it was loaded/resolved with (typed
+// name unchanged, case-insensitively), reuses that id as-is. Otherwise —
+// a brand-new row, or one whose text no longer matches what it was bound
+// to — looks up an existing ingredient by exact name match, or creates a
+// new canonical record. Renaming a shared ingredient (so it changes
+// everywhere at once) is deliberately reserved for the MEP After list's
+// Rename / duplicate-merge flows, not implicit here: typing a different
+// name in a recipe's own form just points this row at a different
+// ingredient, same as it always has.
+async function resolveIngredientIdForRow(row) {
+  const name = row.querySelector('.ing-name').value.trim();
+  const color = row.dataset.color || '';
+  const boundId = row.dataset.ingredientId || '';
+  const boundName = row.dataset.boundName || '';
+
+  if (boundId && existingKey(name) === existingKey(boundName)) {
+    return boundId;
+  }
+
+  const existing = ingredients.find(i => existingKey(i.name) === existingKey(name));
+  if (existing) return existing.id;
+
+  const created = {
+    id: uid(),
+    name,
+    color,
+    prepColor: '',
+    mep: !isMepExcluded(name),
+    defaultUnit: ''
+  };
+  await RailDB.putIngredient(created);
+  ingredients.push(created);
+  ingredientsById.set(created.id, created);
+  return created.id;
+}
+
 recipeForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = document.getElementById('recipeId').value || uid();
 
-  const ingredients = [...ingredientRows.querySelectorAll('.ingredient-row')]
-    .map(row => {
-      if (row.dataset.type === 'separator') {
-        return { type: 'separator', name: row.querySelector('.sep-label').value.trim() };
-      }
-      return {
-        name: row.querySelector('.ing-name').value.trim(),
-        amount: row.querySelector('.ing-amount').value.trim(),
-        unit: row.querySelector('.ing-unit').value.trim(),
-        color: row.dataset.color || ''
-      };
-    })
-    .filter(ing => ing.name);
+  // Ingredient rows are resolved sequentially (not Promise.all) so that
+  // typing the same brand-new name into two rows in this same save
+  // reuses the first row's freshly-created ingredient instead of
+  // creating a duplicate.
+  const ingredientEntries = [];
+  for (const row of [...ingredientRows.querySelectorAll('.ingredient-row')]) {
+    if (row.dataset.type === 'separator') {
+      const label = row.querySelector('.sep-label').value.trim();
+      if (label) ingredientEntries.push({ type: 'separator', name: label });
+      continue;
+    }
+    const name = row.querySelector('.ing-name').value.trim();
+    if (!name) continue;
+    const amount = row.querySelector('.ing-amount').value.trim();
+    const unit = row.querySelector('.ing-unit').value.trim();
+    const color = row.dataset.color || '';
+    const ingredientId = await resolveIngredientIdForRow(row);
+    // Schema v2 rollout: ingredientId is the forward-looking reference,
+    // but name/color are kept embedded too — the MEP After/Before lists
+    // haven't been switched over to the canonical record yet and still
+    // read these directly off the recipe. Safe to drop once they have.
+    ingredientEntries.push({ ingredientId, name, amount, unit, color });
+  }
 
   const steps = [...stepRows.querySelectorAll('.step-row .step-text')]
     .map(input => input.value.trim())
@@ -1225,7 +1325,7 @@ recipeForm.addEventListener('submit', async (e) => {
     id,
     name: document.getElementById('fName').value.trim(),
     category: document.getElementById('fCategory').value,
-    ingredients,
+    ingredients: ingredientEntries,
     steps,
     photos: formPhotos,
     notes: document.getElementById('fNotes').value.trim(),
@@ -1268,3 +1368,4 @@ if ('caches' in window) {
 loadRecipes();
 loadMep();
 loadMepExclusions();
+loadIngredients();
