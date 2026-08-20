@@ -466,7 +466,7 @@ function renderMepAfter() {
     row.querySelector('.mep-add-name').addEventListener('click', (e) => {
       e.stopPropagation();
       const matches = recipes.filter(r => ing.recipeIds.includes(r.id));
-      toggleIngredientRecipePicker(row, matches);
+      toggleIngredientRecipePicker(row, matches, ing.name);
     });
     row.querySelector('.ing-color-btn').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -650,20 +650,28 @@ async function mergeIngredientVariants(group, canonicalName) {
 // Tapping an ingredient's name in the After list opens a small popover
 // listing the recipe(s) it belongs to — tap one to jump straight into its
 // edit form. Always shown (even for a single match) so the interaction is
-// consistent regardless of how many recipes share the ingredient.
+// consistent regardless of how many recipes share the ingredient. A
+// "Rename" entry sits above those — a quick fix for a lone typo, without
+// going through the duplicate-merge review flow below.
 let openIngredientPickerRow = null;
 
-function toggleIngredientRecipePicker(row, recipeMatches) {
+function toggleIngredientRecipePicker(row, recipeMatches, ingName) {
   const alreadyOpenOnThisRow = openIngredientPickerRow === row;
   closeIngredientRecipePicker();
   if (alreadyOpenOnThisRow) return;
 
   const picker = document.createElement('div');
   picker.className = 'recipe-picker';
-  picker.innerHTML = recipeMatches
-    .map(r => `<button type="button" class="recipe-picker-item" data-id="${r.id}">${escapeHtml(r.name)}</button>`)
-    .join('');
-  picker.querySelectorAll('.recipe-picker-item').forEach(btn => {
+  picker.innerHTML = `
+    <button type="button" class="recipe-picker-item recipe-picker-rename">&#9998; Rename</button>
+    ${recipeMatches.map(r => `<button type="button" class="recipe-picker-item" data-id="${r.id}">${escapeHtml(r.name)}</button>`).join('')}
+  `;
+  picker.querySelector('.recipe-picker-rename').addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeIngredientRecipePicker();
+    quickRenameIngredient(ingName);
+  });
+  picker.querySelectorAll('.recipe-picker-item[data-id]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       closeIngredientRecipePicker();
@@ -672,6 +680,18 @@ function toggleIngredientRecipePicker(row, recipeMatches) {
   });
   row.appendChild(picker);
   openIngredientPickerRow = row;
+}
+
+// Reuses mergeIngredientVariants with a single-item "group" (just this
+// ingredient's own current name) — renaming is merging into a new spelling
+// with nothing else to fold in.
+async function quickRenameIngredient(name) {
+  const next = prompt('Rename ingredient', name);
+  if (next === null) return;
+  const trimmed = next.trim();
+  if (!trimmed || trimmed === name) return;
+  await mergeIngredientVariants([{ key: existingKey(name), name }], trimmed);
+  showToast(`Renamed to "${trimmed}"`);
 }
 
 function closeIngredientRecipePicker() {
