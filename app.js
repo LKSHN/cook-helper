@@ -7,15 +7,17 @@ let openCardMenuId = null;
 
 let activeView = 'recap';
 let mepMode = 'before';
+
+// MEP Before list: one document per item (mepBeforeItems), referencing a
+// canonical ingredient by id rather than embedding its own name/color.
+// Drives the Before list UI and the After list's "already added" check.
 let mepBefore = [];
-// Ingredient names excluded from MEP everywhere they appear, not just in
-// one recipe — see toggleMepExclusion(). mepExclusionsDocExists tracks
-// whether the shared doc exists yet, so the one-time migration below only
-// ever runs once (recipesEverLoaded/mepMigrationDone gate the same thing).
-let mepExcludedNames = [];
-let mepExclusionsDocExists = null;
-let recipesEverLoaded = false;
-let mepMigrationDone = false;
+
+// Canonical ingredient records (see IDEAS.md "Data structure"). Recap, the
+// recipe edit form, and the MEP After/Before lists all read and write
+// through these — see resolveIngredientDisplay below.
+let ingredients = [];
+let ingredientsById = new Map();
 
 const cardList = document.getElementById('cardList');
 const emptyState = document.getElementById('emptyState');
@@ -105,59 +107,43 @@ window.addEventListener('unhandledrejection', (e) => {
 function loadRecipes() {
   RailDB.onChange((data) => {
     recipes = data;
-    recipesEverLoaded = true;
     render();
     if (activeView === 'mep' && mepMode === 'after') renderMep();
-    maybeMigrateLegacyMepFlags();
   });
 }
 
-function loadMep() {
-  RailDB.onChangeMepList((items) => {
+function loadMepBeforeItems() {
+  RailDB.onChangeMepBeforeItems((items) => {
     mepBefore = items;
     if (activeView === 'mep') renderMep();
   });
 }
 
-function isMepExcluded(name) {
-  return mepExcludedNames.includes((name || '').trim().toLowerCase());
-}
-
-function loadMepExclusions() {
-  RailDB.onChangeMepExclusions((names, exists) => {
-    mepExcludedNames = names;
-    mepExclusionsDocExists = exists;
-    maybeMigrateLegacyMepFlags();
+function loadIngredients() {
+  RailDB.onChangeIngredients((data) => {
+    ingredients = data;
+    ingredientsById = new Map(data.map(i => [i.id, i]));
+    render();
     syncAllMepButtons();
-    if (activeView === 'mep' && mepMode === 'after') renderMepAfter();
+    if (activeView === 'mep') renderMep();
   });
 }
 
-// One-time migration from the old per-recipe-ingredient `mep: false` flag
-// (which couldn't be shared across recipes) to the new shared exclusion
-// list. Waits for both the exclusions doc's existence and the recipes to
-// be known before deciding — whichever of the two listeners fires first
-// just records its half and returns.
-function maybeMigrateLegacyMepFlags() {
-  if (mepMigrationDone) return;
-  if (mepExclusionsDocExists === null || !recipesEverLoaded) return;
-  mepMigrationDone = true;
-  if (mepExclusionsDocExists) return; // already has a real doc — nothing to migrate
-
-  const legacy = new Set();
-  recipes.forEach(r => (r.ingredients || []).forEach(ing => {
-    if (ing.mep === false && ing.name) legacy.add(ing.name.trim().toLowerCase());
-  }));
-  if (legacy.size) {
-    mepExcludedNames = [...legacy];
-    RailDB.setMepExclusions(mepExcludedNames);
-  }
+// Resolves a recipe's embedded ingredient entry to a display-ready
+// {name, color} pair via the canonical ingredients/{id} record.
+function resolveIngredientDisplay(ing) {
+  const canonical = ingredientsById.get(ing.ingredientId);
+  return {
+    name: canonical ? canonical.name : '',
+    color: canonical ? (canonical.color || '') : ''
+  };
 }
 
 function filteredRecipes() {
   return recipes.filter(r => {
     if (!searchTerm) return true;
-    const hay = (r.name + ' ' + (r.ingredients || []).map(i => i.name).join(' ')).toLowerCase();
+    const ingredientNames = realIngredients(r).map(i => resolveIngredientDisplay(i).name);
+    const hay = (r.name + ' ' + ingredientNames.join(' ')).toLowerCase();
     return hay.includes(searchTerm.toLowerCase());
   });
 }
@@ -298,9 +284,10 @@ function ingredientLiHtml(ing) {
   if (ing.type === 'separator') {
     return `<li class="ingredient-separator">${escapeHtml(ing.name)}</li>`;
   }
+  const { name, color } = resolveIngredientDisplay(ing);
   const qty = ing.amount ? ing.amount + ' ' + escapeHtml(ing.unit || '') : '';
-  const dot = ing.color ? `<span class="ing-dot" style="background:${ing.color}"></span>` : '';
-  return `<li><span class="ing-name-wrap">${dot}${escapeHtml(ing.name)}</span><span class="ingredient-qty">${qty}</span></li>`;
+  const dot = color ? `<span class="ing-dot" style="background:${color}"></span>` : '';
+  return `<li><span class="ing-name-wrap">${dot}${escapeHtml(name)}</span><span class="ingredient-qty">${qty}</span></li>`;
 }
 
 // ---- Station tabs (scroll-to-section anchors, not filters) ----
@@ -350,10 +337,19 @@ function renderMep() {
 
 // Palette position of a container color, for sorting groups in a stable,
 // consistent order; no-color items sort last. Shared by both the Before
-// and After "By container" sorts.
+// and After "By color" sorts.
 function colorSortIndex(color) {
   const i = INGREDIENT_COLORS.indexOf(color);
   return i === -1 ? INGREDIENT_COLORS.length : i;
+}
+
+// A Before item's color always comes from its canonical ingredient now —
+// editing it (see renderMepBefore) is "everywhere", same as the After
+// list's color button, since color no longer has anywhere per-item to
+// live independently.
+function beforeItemColor(item) {
+  const canonical = ingredientsById.get(item.ingredientId);
+  return canonical ? (canonical.color || '') : '';
 }
 
 // 'added' keeps Firestore array order (insertion order); 'container'
@@ -363,7 +359,7 @@ let mepBeforeSort = 'added';
 
 function sortedMepBefore() {
   if (mepBeforeSort !== 'container') return mepBefore;
-  return [...mepBefore].sort((a, b) => colorSortIndex(a.color) - colorSortIndex(b.color));
+  return [...mepBefore].sort((a, b) => colorSortIndex(beforeItemColor(a)) - colorSortIndex(beforeItemColor(b)));
 }
 
 mepSortTabs.addEventListener('click', (e) => {
@@ -382,12 +378,16 @@ function renderMepBefore() {
   }
 
   sortedMepBefore().forEach(item => {
+    const canonical = ingredientsById.get(item.ingredientId);
+    const name = canonical ? canonical.name : '';
+    const color = canonical ? (canonical.color || '') : '';
+
     const row = document.createElement('div');
     row.className = 'mep-row';
     row.innerHTML = `
       <button type="button" class="mep-check" aria-label="Mark prepped">&#10003;</button>
-      <button type="button" class="ing-color-btn" aria-label="Set container color" style="${item.color ? `background:${item.color}` : ''}"></button>
-      <span class="mep-row-name">${escapeHtml(item.name)}</span>
+      <button type="button" class="ing-color-btn" aria-label="Set container color" style="${color ? `background:${color}` : ''}"></button>
+      <span class="mep-row-name">${escapeHtml(name)}</span>
       <input type="text" class="ing-amount" placeholder="Qty" value="${escapeHtml(item.amount || '')}">
       <button type="button" class="mep-row-remove" aria-label="Remove">&times;</button>
     `;
@@ -399,28 +399,40 @@ function renderMepBefore() {
     });
     row.querySelector('.ing-color-btn').addEventListener('click', (e) => {
       e.stopPropagation();
-      toggleColorPicker(row, item.color || '', (color) => updateBeforeItem(item.id, { color }));
+      toggleColorPicker(row, color, (newColor) => {
+        if (canonical) RailDB.putIngredient({ ...canonical, color: newColor });
+      });
     });
 
     mepBeforeListEl.appendChild(row);
   });
 }
 
-function aggregatedIngredients() {
+// Which recipes use each canonical ingredient, plus a display unit (the
+// first non-empty embedded unit found) — the shared basis for both the
+// After list and duplicate detection below.
+function ingredientUsage() {
   const map = new Map();
   recipes.forEach(r => {
     realIngredients(r).forEach(ing => {
-      if (isMepExcluded(ing.name)) return;
-      const key = (ing.name || '').trim().toLowerCase();
-      if (!key) return;
-      if (!map.has(key)) {
-        map.set(key, { name: ing.name.trim(), unit: ing.unit || '', color: ing.color || '', recipeIds: new Set() });
-      }
-      map.get(key).recipeIds.add(r.id);
+      if (!ing.ingredientId) return;
+      if (!map.has(ing.ingredientId)) map.set(ing.ingredientId, { recipeIds: new Set(), unit: '' });
+      const usage = map.get(ing.ingredientId);
+      usage.recipeIds.add(r.id);
+      if (!usage.unit && ing.unit) usage.unit = ing.unit;
     });
   });
-  return [...map.values()]
-    .map(v => ({ ...v, recipeIds: [...v.recipeIds] }))
+  return map;
+}
+
+function aggregatedIngredients() {
+  const usage = ingredientUsage();
+  return ingredients
+    .filter(ing => ing.mep !== false && usage.has(ing.id))
+    .map(ing => {
+      const u = usage.get(ing.id);
+      return { id: ing.id, name: ing.name, color: ing.color || '', unit: u.unit, recipeIds: [...u.recipeIds] };
+    })
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -453,8 +465,7 @@ function renderMepAfter() {
   }
 
   items.forEach(ing => {
-    const key = ing.name.toLowerCase();
-    const already = mepBefore.some(i => i.name.trim().toLowerCase() === key);
+    const already = mepBefore.some(i => i.ingredientId === ing.id);
 
     const row = document.createElement('div');
     row.className = 'mep-add-row';
@@ -466,46 +477,29 @@ function renderMepAfter() {
     row.querySelector('.mep-add-name').addEventListener('click', (e) => {
       e.stopPropagation();
       const matches = recipes.filter(r => ing.recipeIds.includes(r.id));
-      toggleIngredientRecipePicker(row, matches);
+      toggleIngredientRecipePicker(row, matches, ing);
     });
     row.querySelector('.ing-color-btn').addEventListener('click', (e) => {
       e.stopPropagation();
-      toggleColorPicker(row, ing.color || '', (color) => setIngredientColorEverywhere(ing.name, color));
+      toggleColorPicker(row, ing.color || '', (color) => RailDB.putIngredient({ ...ingredientsById.get(ing.id), color }));
     });
     if (!already) {
-      row.querySelector('.mep-add-btn').addEventListener('click', () => addToBeforeList(ing.name, ing.unit, ing.color));
+      row.querySelector('.mep-add-btn').addEventListener('click', () => addToBeforeList(ing.id, ing.unit));
     }
     mepAfterListEl.appendChild(row);
   });
 }
 
-// Changing an ingredient's color from the After list applies it to that
-// ingredient everywhere it's used across recipes — same "shared by name"
-// pattern as the MEP exclusion toggle. Recipes already added to the Before
-// list keep their own independent color (see addToBeforeList).
-function setIngredientColorEverywhere(name, color) {
-  const key = name.trim().toLowerCase();
-  recipes.forEach(r => {
-    if (!realIngredients(r).some(i => (i.name || '').trim().toLowerCase() === key)) return;
-    const updated = {
-      ...r,
-      ingredients: (r.ingredients || []).map(i =>
-        i.type !== 'separator' && (i.name || '').trim().toLowerCase() === key ? { ...i, color } : i
-      )
-    };
-    RailDB.put(updated);
-  });
-}
-
 // ---- Possible-duplicate ingredient detection ----
-// The app already treats names as the same ingredient once trimmed and
-// lowercased (existingKey) — that's what aggregatedIngredients, the MEP
-// exclusion list, and setIngredientColorEverywhere all key off. What slips
-// through that is real spelling variance: accents, doubled-up whitespace,
-// or a trailing French/English plural "s" ("Rillette" vs "Rillettes").
-// fuzzyKey folds those away too, purely to *detect* likely near-misses —
-// existingKey stays the source of truth for what the rest of the app
-// considers identical.
+// Schema v2 identifies an ingredient by canonical id, not by name string,
+// so exact-name duplicates can't recur once merged — but
+// resolveIngredientIdForRow only matches by *exact* name, so two rows
+// typed as slightly different spellings ("Ciboulette" / "Ciboulettes")
+// still create two separate canonical records. fuzzyKey folds away
+// accents, doubled-up whitespace, and a trailing French/English plural
+// "s", purely to *detect* likely near-misses among canonical ingredients —
+// existingKey (exact match) stays what the rest of the app treats as
+// identical.
 function existingKey(name) {
   return (name || '').trim().toLowerCase();
 }
@@ -520,28 +514,23 @@ function fuzzyKey(name) {
   return s;
 }
 
-// One entry per distinct existingKey currently in use, grouped by fuzzyKey.
-// Only groups with 2+ distinct existingKeys are real candidates — the app
-// doesn't already treat those as the same ingredient.
+// Groups canonical ingredients (that are actually in use — see
+// ingredientUsage) by fuzzyKey. Only groups with 2+ ingredients are real
+// candidates; a lone ingredient isn't a duplicate of anything.
 function findDuplicateGroups() {
-  const byExisting = new Map();
-  recipes.forEach(r => {
-    realIngredients(r).forEach(ing => {
-      const name = (ing.name || '').trim();
-      if (!name) return;
-      const key = existingKey(name);
-      if (!byExisting.has(key)) byExisting.set(key, { key, name, count: 0, recipeNames: new Set() });
-      const entry = byExisting.get(key);
-      entry.count++;
-      entry.recipeNames.add(r.name);
-    });
-  });
-
+  const usage = ingredientUsage();
   const byFuzzy = new Map();
-  byExisting.forEach((entry) => {
-    const fk = fuzzyKey(entry.name);
+  ingredients.forEach(ing => {
+    if (!usage.has(ing.id)) return;
+    const fk = fuzzyKey(ing.name);
     if (!byFuzzy.has(fk)) byFuzzy.set(fk, []);
-    byFuzzy.get(fk).push({ ...entry, recipeNames: [...entry.recipeNames] });
+    const u = usage.get(ing.id);
+    byFuzzy.get(fk).push({
+      id: ing.id,
+      name: ing.name,
+      count: u.recipeIds.size,
+      recipeNames: [...u.recipeIds].map(rid => recipes.find(r => r.id === rid)).filter(Boolean).map(r => r.name)
+    });
   });
 
   return [...byFuzzy.values()]
@@ -580,9 +569,9 @@ function renderDupList() {
       <div class="dup-variants">
         ${group.map((v, i) => `
           <label class="dup-variant${i === 0 ? ' selected' : ''}">
-            <input type="radio" name="dup-${idx}" value="${escapeHtml(v.name)}" ${i === 0 ? 'checked' : ''}>
+            <input type="radio" name="dup-${idx}" value="${v.id}" ${i === 0 ? 'checked' : ''}>
             <span class="dup-variant-name">${escapeHtml(v.name)}</span>
-            <span class="dup-variant-meta">${v.count} use${v.count > 1 ? 's' : ''} · ${escapeHtml([...v.recipeNames].slice(0, 2).join(', '))}${v.recipeNames.length > 2 ? '…' : ''}</span>
+            <span class="dup-variant-meta">${v.count} use${v.count > 1 ? 's' : ''} · ${escapeHtml(v.recipeNames.slice(0, 2).join(', '))}${v.recipeNames.length > 2 ? '…' : ''}</span>
           </label>
         `).join('')}
       </div>
@@ -596,74 +585,77 @@ function renderDupList() {
       });
     });
     card.querySelector('.dup-merge-btn').addEventListener('click', async () => {
-      const chosen = card.querySelector(`input[name="dup-${idx}"]:checked`).value;
-      if (!confirm(`Merge these into "${chosen}"? This renames the ingredient in every recipe that uses it.`)) return;
-      await mergeIngredientVariants(group, chosen);
-      showToast(`Merged into "${chosen}"`);
+      const chosenId = card.querySelector(`input[name="dup-${idx}"]:checked`).value;
+      const chosenName = group.find(v => v.id === chosenId).name;
+      if (!confirm(`Merge these into "${chosenName}"? This repoints every recipe that uses one of the others.`)) return;
+      await mergeIngredientVariants(group, chosenId);
+      showToast(`Merged into "${chosenName}"`);
       renderDupList();
     });
     dupList.appendChild(card);
   });
 }
 
-// Rewrites every variant in `group` (except whichever one matches
-// `canonicalName`) to the canonical spelling — in every recipe, and in the
-// Before list / shared MEP exclusion list if they reference a stale name.
-// Colors are left alone: the After list's own color swatch already covers
-// that, independently of naming.
-async function mergeIngredientVariants(group, canonicalName) {
-  const canonicalKey = existingKey(canonicalName);
-  const staleKeys = new Set(group.map(v => v.key).filter(k => k !== canonicalKey));
-  if (!staleKeys.size) return;
+// Merges `group` (canonical ingredient records from findDuplicateGroups,
+// or a single-item group from quickRenameIngredient) into whichever one
+// matches `keepId` — repoints every recipe ingredient entry referencing
+// one of the others to keepId, then deletes the now-unused canonical
+// docs. If the Before list has an item under one of the merged-away
+// ingredients, repoints that too (or drops it, if a Before item for the
+// kept ingredient already exists — no point prepping the same thing twice).
+async function mergeIngredientVariants(group, keepId) {
+  const staleIds = new Set(group.map(v => v.id).filter(gid => gid !== keepId));
+  if (!staleIds.size) return;
 
-  const affected = recipes.filter(r => realIngredients(r).some(i => staleKeys.has(existingKey(i.name))));
+  const affected = recipes.filter(r => realIngredients(r).some(i => staleIds.has(i.ingredientId)));
   await Promise.all(affected.map(r => RailDB.put({
     ...r,
     ingredients: (r.ingredients || []).map(i =>
-      i.type !== 'separator' && staleKeys.has(existingKey(i.name)) ? { ...i, name: canonicalName } : i
+      i.type !== 'separator' && staleIds.has(i.ingredientId)
+        ? { ...i, ingredientId: keepId }
+        : i
     )
   })));
 
-  const touchesBeforeList = mepBefore.some(i => staleKeys.has(existingKey(i.name)) || existingKey(i.name) === canonicalKey);
-  if (touchesBeforeList) {
-    let keptCanonical = false;
-    const renamed = [];
-    mepBefore.forEach(i => {
-      const key = existingKey(i.name);
-      if (staleKeys.has(key) || key === canonicalKey) {
-        if (keptCanonical) return; // drop the duplicate — first occurrence wins
-        keptCanonical = true;
-        renamed.push(staleKeys.has(key) ? { ...i, name: canonicalName } : i);
-      } else {
-        renamed.push(i);
-      }
-    });
-    await RailDB.setMepList(renamed);
+  const beforeItemsForStale = mepBefore.filter(i => staleIds.has(i.ingredientId));
+  if (beforeItemsForStale.length) {
+    if (mepBefore.some(i => i.ingredientId === keepId)) {
+      await Promise.all(beforeItemsForStale.map(i => RailDB.removeMepBeforeItem(i.id)));
+    } else {
+      const [first, ...rest] = beforeItemsForStale;
+      await RailDB.putMepBeforeItem({ ...first, ingredientId: keepId });
+      await Promise.all(rest.map(i => RailDB.removeMepBeforeItem(i.id)));
+    }
   }
 
-  if (mepExcludedNames.some(n => staleKeys.has(n))) {
-    const next = [...new Set(mepExcludedNames.map(n => (staleKeys.has(n) ? canonicalKey : n)))];
-    await RailDB.setMepExclusions(next);
-  }
+  await Promise.all([...staleIds].map(sid => RailDB.deleteIngredient(sid)));
 }
 
 // Tapping an ingredient's name in the After list opens a small popover
 // listing the recipe(s) it belongs to — tap one to jump straight into its
 // edit form. Always shown (even for a single match) so the interaction is
-// consistent regardless of how many recipes share the ingredient.
+// consistent regardless of how many recipes share the ingredient. A
+// "Rename" entry sits above those — a quick fix for a lone typo, without
+// going through the duplicate-merge review flow below.
 let openIngredientPickerRow = null;
 
-function toggleIngredientRecipePicker(row, recipeMatches) {
+function toggleIngredientRecipePicker(row, recipeMatches, ing) {
   const alreadyOpenOnThisRow = openIngredientPickerRow === row;
   closeIngredientRecipePicker();
   if (alreadyOpenOnThisRow) return;
 
   const picker = document.createElement('div');
   picker.className = 'recipe-picker';
-  picker.innerHTML = recipeMatches
-    .map(r => `<button type="button" class="recipe-picker-item" data-id="${r.id}">${escapeHtml(r.name)}</button>`)
-    .join('');
-  picker.querySelectorAll('.recipe-picker-item').forEach(btn => {
+  picker.innerHTML = `
+    <button type="button" class="recipe-picker-item recipe-picker-rename">&#9998; Rename</button>
+    ${recipeMatches.map(r => `<button type="button" class="recipe-picker-item" data-id="${r.id}">${escapeHtml(r.name)}</button>`).join('')}
+  `;
+  picker.querySelector('.recipe-picker-rename').addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeIngredientRecipePicker();
+    quickRenameIngredient(ing);
+  });
+  picker.querySelectorAll('.recipe-picker-item[data-id]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       closeIngredientRecipePicker();
@@ -672,6 +664,26 @@ function toggleIngredientRecipePicker(row, recipeMatches) {
   });
   row.appendChild(picker);
   openIngredientPickerRow = row;
+}
+
+// A direct rename of the canonical ingredient (single-doc write) — the
+// common case of fixing a lone typo with nothing else to fold in. Reuses
+// mergeIngredientVariants with a single-item "group" so a rename that
+// happens to collide with another existing ingredient's exact name still
+// merges correctly instead of producing two ingredients with the same name.
+async function quickRenameIngredient(ing) {
+  const next = prompt('Rename ingredient', ing.name);
+  if (next === null) return;
+  const trimmed = next.trim();
+  if (!trimmed || existingKey(trimmed) === existingKey(ing.name)) return;
+
+  const collision = ingredients.find(i => i.id !== ing.id && existingKey(i.name) === existingKey(trimmed));
+  if (collision) {
+    await mergeIngredientVariants([{ id: ing.id, name: ing.name }, { id: collision.id, name: collision.name }], collision.id);
+  } else {
+    await RailDB.putIngredient({ ...ingredientsById.get(ing.id), name: trimmed });
+  }
+  showToast(`Renamed to "${trimmed}"`);
 }
 
 function closeIngredientRecipePicker() {
@@ -685,22 +697,25 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('.recipe-picker') && !e.target.closest('.mep-add-name')) closeIngredientRecipePicker();
 });
 
-// New items inherit the color the ingredient already has in its recipe
-// (if any) as a starting "container" tag — editable afterward from the
-// Before list, independent of the recipe from then on.
-function addToBeforeList(name, unit, color) {
-  const key = name.trim().toLowerCase();
-  if (mepBefore.some(i => i.name.trim().toLowerCase() === key)) return;
-  const items = [...mepBefore, { id: uid(), name: name.trim(), amount: '', unit: unit || '', color: color || '' }];
-  RailDB.setMepList(items);
+// Each doc is its own write now (mepBeforeItems), not a whole-array
+// overwrite — two devices adding/editing/removing different items at once
+// no longer clobber each other. Color isn't stored here at all: it always
+// resolves from the canonical ingredient (see beforeItemColor), so there's
+// nothing to inherit or keep independent — editing it is "everywhere",
+// same as the After list's color button.
+function addToBeforeList(ingredientId, unit) {
+  if (mepBefore.some(i => i.ingredientId === ingredientId)) return;
+  RailDB.putMepBeforeItem({ id: uid(), ingredientId, amount: '', unit: unit || '', addedAt: Date.now() });
 }
 
 function removeFromBeforeList(id) {
-  RailDB.setMepList(mepBefore.filter(i => i.id !== id));
+  RailDB.removeMepBeforeItem(id);
 }
 
 function updateBeforeItem(id, patch) {
-  RailDB.setMepList(mepBefore.map(i => (i.id === id ? { ...i, ...patch } : i)));
+  const item = mepBefore.find(i => i.id === id);
+  if (!item) return;
+  RailDB.putMepBeforeItem({ ...item, ...patch });
 }
 
 // ---- Search ----
@@ -787,8 +802,9 @@ function openForm(id) {
     document.getElementById('fCategory').value = r.category;
     document.getElementById('fNotes').value = r.notes || '';
     (r.ingredients || []).forEach(ing => {
-      if (ing.type === 'separator') addSeparatorRow(ing.name);
-      else addIngredientRow(ing.name, ing.amount, ing.unit, ing.color);
+      if (ing.type === 'separator') { addSeparatorRow(ing.name); return; }
+      const { name, color } = resolveIngredientDisplay(ing);
+      addIngredientRow(name, ing.amount, ing.unit, color, ing.ingredientId || null);
     });
     (r.steps || []).forEach(step => addStepRow(step));
     formPhotos = (r.photos || []).slice();
@@ -959,10 +975,24 @@ function wireReorderButtons(row) {
   row.querySelector('.row-down').addEventListener('click', () => moveRow(row, 'down'));
 }
 
-function addIngredientRow(name = '', amount = '', unit = '', color = '') {
+// `ingredientId` is the canonical ingredient this row was loaded as, if
+// any — null for a brand-new row. Kept on the row's dataset, along with
+// the name it was resolved from (boundName), so the submit handler can
+// tell whether the row is still "the same ingredient" (typed name
+// unchanged) or should look up/create a different one (typed name
+// changed) — see resolveIngredientIdForRow.
+function addIngredientRow(name = '', amount = '', unit = '', color = '', ingredientId = null) {
   const row = document.createElement('div');
   row.className = 'ingredient-row';
   row.dataset.color = color;
+  row.dataset.ingredientId = ingredientId || '';
+  row.dataset.boundName = name;
+  // Local staging for a row not yet bound to any canonical ingredient
+  // (new row, or typed name doesn't match an existing one) — used by
+  // resolveIngredientIdForRow when it creates the new record on save.
+  // Once bound, the canonical record's own `mep` field is the live source
+  // (see syncMepButton) and this is ignored.
+  row.dataset.mepIncluded = 'true';
   const unitOptions = UNITS.map(u => {
     const val = u === 'None' ? '' : u;
     return `<option value="${val}" ${unit === val ? 'selected' : ''}>${u}</option>`;
@@ -983,12 +1013,32 @@ function addIngredientRow(name = '', amount = '', unit = '', color = '') {
     toggleColorPicker(row, row.dataset.color || '', (color) => {
       row.dataset.color = color;
       row.querySelector('.ing-color-btn').style.background = color || '';
+      // Once a row is bound to a canonical ingredient, its color is
+      // shared everywhere that ingredient is used — same "everywhere"
+      // semantics as the MEP After list's color button, since color now
+      // lives on the canonical record rather than per-recipe. A row not
+      // yet bound to an id (new/unmatched) just updates its own dataset;
+      // the color reaches the canonical record when the row gets
+      // resolved to an ingredientId on save.
+      if (row.dataset.ingredientId) {
+        const current = ingredientsById.get(row.dataset.ingredientId);
+        if (current) RailDB.putIngredient({ ...current, color });
+      }
     });
   });
   row.querySelector('.ing-mep-btn').addEventListener('click', (e) => {
     e.stopPropagation();
     const currentName = row.querySelector('.ing-name').value.trim();
-    if (currentName) toggleMepExclusion(currentName);
+    if (!currentName) return;
+    const match = ingredients.find(i => existingKey(i.name) === existingKey(currentName));
+    if (match) {
+      const next = match.mep === false;
+      RailDB.putIngredient({ ...match, mep: next });
+      showToast(next ? 'Included in MEP again' : 'Excluded from MEP everywhere');
+    } else {
+      row.dataset.mepIncluded = row.dataset.mepIncluded === 'false' ? 'true' : 'false';
+      syncMepButton(row);
+    }
   });
   // The MEP toggle's state is keyed by ingredient name, not by this row —
   // re-sync it live as the name changes so typing "Salt" immediately shows
@@ -998,23 +1048,10 @@ function addIngredientRow(name = '', amount = '', unit = '', color = '') {
   syncMepButton(row);
 }
 
-// Toggles whether `name` is excluded from MEP everywhere it's used — this
-// is shared across every recipe, not just the row that was clicked. See
-// mepExcludedNames.
-function toggleMepExclusion(name) {
-  const key = name.trim().toLowerCase();
-  if (!key) return;
-  const wasExcluded = isMepExcluded(key);
-  const next = wasExcluded
-    ? mepExcludedNames.filter(n => n !== key)
-    : [...mepExcludedNames, key];
-  RailDB.setMepExclusions(next);
-  showToast(wasExcluded ? 'Included in MEP again' : 'Excluded from MEP everywhere');
-}
-
 function syncMepButton(row) {
   const name = row.querySelector('.ing-name').value.trim();
-  const included = !isMepExcluded(name);
+  const match = ingredients.find(i => existingKey(i.name) === existingKey(name));
+  const included = match ? match.mep !== false : row.dataset.mepIncluded !== 'false';
   const btn = row.querySelector('.ing-mep-btn');
   btn.classList.toggle('active', included);
   btn.innerHTML = included ? '&#10003;' : '';
@@ -1104,23 +1141,65 @@ function addStepRow(text = '') {
 
 addStepBtn.addEventListener('click', () => addStepRow());
 
+// Finds or creates the canonical ingredient a row should save against.
+// If the row is still bound to the id it was loaded/resolved with (typed
+// name unchanged, case-insensitively), reuses that id as-is. Otherwise —
+// a brand-new row, or one whose text no longer matches what it was bound
+// to — looks up an existing ingredient by exact name match, or creates a
+// new canonical record. Renaming a shared ingredient (so it changes
+// everywhere at once) is deliberately reserved for the MEP After list's
+// Rename / duplicate-merge flows, not implicit here: typing a different
+// name in a recipe's own form just points this row at a different
+// ingredient, same as it always has.
+async function resolveIngredientIdForRow(row) {
+  const name = row.querySelector('.ing-name').value.trim();
+  const color = row.dataset.color || '';
+  const boundId = row.dataset.ingredientId || '';
+  const boundName = row.dataset.boundName || '';
+
+  if (boundId && existingKey(name) === existingKey(boundName)) {
+    return boundId;
+  }
+
+  const existing = ingredients.find(i => existingKey(i.name) === existingKey(name));
+  if (existing) return existing.id;
+
+  const created = {
+    id: uid(),
+    name,
+    color,
+    prepColor: '',
+    mep: row.dataset.mepIncluded !== 'false',
+    defaultUnit: ''
+  };
+  await RailDB.putIngredient(created);
+  ingredients.push(created);
+  ingredientsById.set(created.id, created);
+  return created.id;
+}
+
 recipeForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = document.getElementById('recipeId').value || uid();
 
-  const ingredients = [...ingredientRows.querySelectorAll('.ingredient-row')]
-    .map(row => {
-      if (row.dataset.type === 'separator') {
-        return { type: 'separator', name: row.querySelector('.sep-label').value.trim() };
-      }
-      return {
-        name: row.querySelector('.ing-name').value.trim(),
-        amount: row.querySelector('.ing-amount').value.trim(),
-        unit: row.querySelector('.ing-unit').value.trim(),
-        color: row.dataset.color || ''
-      };
-    })
-    .filter(ing => ing.name);
+  // Ingredient rows are resolved sequentially (not Promise.all) so that
+  // typing the same brand-new name into two rows in this same save
+  // reuses the first row's freshly-created ingredient instead of
+  // creating a duplicate.
+  const ingredientEntries = [];
+  for (const row of [...ingredientRows.querySelectorAll('.ingredient-row')]) {
+    if (row.dataset.type === 'separator') {
+      const label = row.querySelector('.sep-label').value.trim();
+      if (label) ingredientEntries.push({ type: 'separator', name: label });
+      continue;
+    }
+    const name = row.querySelector('.ing-name').value.trim();
+    if (!name) continue;
+    const amount = row.querySelector('.ing-amount').value.trim();
+    const unit = row.querySelector('.ing-unit').value.trim();
+    const ingredientId = await resolveIngredientIdForRow(row);
+    ingredientEntries.push({ ingredientId, amount, unit });
+  }
 
   const steps = [...stepRows.querySelectorAll('.step-row .step-text')]
     .map(input => input.value.trim())
@@ -1130,7 +1209,7 @@ recipeForm.addEventListener('submit', async (e) => {
     id,
     name: document.getElementById('fName').value.trim(),
     category: document.getElementById('fCategory').value,
-    ingredients,
+    ingredients: ingredientEntries,
     steps,
     photos: formPhotos,
     notes: document.getElementById('fNotes').value.trim(),
@@ -1171,5 +1250,5 @@ if ('caches' in window) {
 }
 
 loadRecipes();
-loadMep();
-loadMepExclusions();
+loadMepBeforeItems();
+loadIngredients();

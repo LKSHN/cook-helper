@@ -1,7 +1,13 @@
-# Ideas
+# WIP Features/Changes
 
 Drop anything here — one line or a whole paragraph, doesn't need to be polished.
 When you want one built, just point me at it (or say "build the next one").
+
+- Ingredients input of recipe edit view: 
+    - Can you also make it apply or force some sort of norm (like "Butter Sliced" type of norm) so the list looks more consistent and professional
+    - Make it show the list of similar ingredient or some sort of autofilling proposal so it's easier to add ingredient that is present in another recipe    
+
+- Recipe edit view: I want to be able to change the two colors we have for each ingredient (one is for the container color, which is used in the recap view and the after mep list, and the other which is more about the time needed to prep them so it sort it out, that will be used for the before mep list)
 
 - Shop tab: currently just a placeholder ("Shop is coming soon.") — build out what it should actually do
 
@@ -41,3 +47,9 @@ When you want one built, just point me at it (or say "build the next one").
 - MEP After list: the color dot is now an editable swatch button, same as the Before list's — changing it there updates that ingredient's container color across every recipe that uses it. Colors already set on Before-list items stay independent once added, as before.
 
 - Duplicate ingredient detection: the After tab now flags likely-duplicate ingredient names it wouldn't already merge on its own — accents, extra spaces, or a trailing French/English plural "s" (e.g. "Ciboulette" vs "Ciboulettes"). A banner appears when any are found; tapping it opens a review list per group, pick which spelling to keep and merge — renames the ingredient in every recipe that uses it, and folds matching Before-list items / MEP exclusions into the kept spelling too.
+
+- Changes sort name: renamed the "By container" sort option to "By color" on both the MEP Before and After tabs — same sort, clearer label.
+
+- MEP After quick rename: tapping an ingredient's name in the After list now shows a "Rename" entry above the recipe-jump list — fixes a single typo directly (prompts for the new spelling, renames it everywhere) without going through the full duplicate-merge review flow.
+
+- Data structure: replaced the embedded per-recipe ingredient name/color and the old array-doc Before list / name-keyed exclusion list with a normalized `ingredients` collection (canonical id/name/color/prepColor/mep/defaultUnit) and a `mepBeforeItems` collection (one doc per Before-list item), both referenced by id instead of duplicated everywhere. Migrated existing data over automatically, then dropped the legacy read/write paths once confirmed on the live data.

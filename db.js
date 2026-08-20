@@ -20,8 +20,13 @@ firestore.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 const storage = firebase.storage();
 
 const recipesRef = firestore.collection('recipes');
-const mepBeforeRef = firestore.collection('mep').doc('beforeList');
-const mepExclusionsRef = firestore.collection('mep').doc('excludedIngredients');
+
+// A normalized `ingredients` collection is the canonical record for a
+// name/color/prepColor/mep flag, referenced by id from both recipes and
+// mepBeforeItems, instead of that data being embedded and duplicated
+// across every recipe (see IDEAS.md "Data structure").
+const ingredientsRef = firestore.collection('ingredients');
+const mepBeforeItemsRef = firestore.collection('mepBeforeItems');
 
 const RailDB = {
   // Subscribes to live changes; calls cb(recipes) immediately and on every
@@ -49,25 +54,32 @@ const RailDB = {
   async deletePhoto(path) {
     await storage.ref(path).delete().catch(() => {});
   },
-  // MEP "before service" prep checklist — one shared doc, synced like recipes.
-  onChangeMepList(cb) {
-    return mepBeforeRef.onSnapshot((snap) => {
-      cb((snap.data() && snap.data().items) || []);
+  // Canonical ingredient records — see IDEAS.md "Data structure".
+  onChangeIngredients(cb) {
+    return ingredientsRef.onSnapshot((snap) => {
+      cb(snap.docs.map((d) => d.data()));
     });
   },
-  async setMepList(items) {
-    await mepBeforeRef.set({ items });
+  async putIngredient(ingredient) {
+    await ingredientsRef.doc(ingredient.id).set(ingredient);
+    return ingredient;
   },
-  // Ingredient names excluded from MEP, shared across every recipe that
-  // uses them (e.g. salt, water) — one doc, same pattern as the before
-  // list. cb's second arg tells the caller whether the doc exists yet, so
-  // a one-time migration from the old per-recipe flag can run exactly once.
-  onChangeMepExclusions(cb) {
-    return mepExclusionsRef.onSnapshot((snap) => {
-      cb((snap.data() && snap.data().names) || [], snap.exists);
+  async deleteIngredient(id) {
+    await ingredientsRef.doc(id).delete();
+  },
+  // MEP before-list items as individual documents (schema v2) instead of
+  // one array inside a single doc — avoids two devices editing different
+  // items at once clobbering each other's write.
+  onChangeMepBeforeItems(cb) {
+    return mepBeforeItemsRef.onSnapshot((snap) => {
+      cb(snap.docs.map((d) => d.data()));
     });
   },
-  async setMepExclusions(names) {
-    await mepExclusionsRef.set({ names });
+  async putMepBeforeItem(item) {
+    await mepBeforeItemsRef.doc(item.id).set(item);
+    return item;
+  },
+  async removeMepBeforeItem(id) {
+    await mepBeforeItemsRef.doc(id).delete();
   }
 };
