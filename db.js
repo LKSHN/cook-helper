@@ -32,6 +32,7 @@ const mepExclusionsRef = firestore.collection('mep').doc('excludedIngredients');
 const ingredientsRef = firestore.collection('ingredients');
 const mepBeforeItemsRef = firestore.collection('mepBeforeItems');
 const schemaMigrationRef = firestore.collection('migrations').doc('schemaV2');
+const schemaBackfillRef = firestore.collection('migrations').doc('schemaV2Backfill');
 
 const RailDB = {
   // Subscribes to live changes; calls cb(recipes) immediately and on every
@@ -91,6 +92,9 @@ const RailDB = {
     await ingredientsRef.doc(ingredient.id).set(ingredient);
     return ingredient;
   },
+  async deleteIngredient(id) {
+    await ingredientsRef.doc(id).delete();
+  },
   // MEP before-list items as individual documents (schema v2) instead of
   // one array inside a single doc — avoids two devices editing different
   // items at once clobbering each other's write.
@@ -112,5 +116,16 @@ const RailDB = {
   },
   async markSchemaV2Migrated() {
     await schemaMigrationRef.set({ migratedAt: Date.now() });
+  },
+  // Separate marker from schemaV2Migrated above: that one seeds the
+  // `ingredients` collection without touching recipe docs; this one tracks
+  // the follow-up pass that attaches ingredientId onto every recipe's
+  // ingredient entries so the MEP After list can rely on it being there.
+  async isIngredientIdBackfillDone() {
+    const snap = await schemaBackfillRef.get();
+    return snap.exists;
+  },
+  async markIngredientIdBackfillDone() {
+    await schemaBackfillRef.set({ migratedAt: Date.now() });
   }
 };
