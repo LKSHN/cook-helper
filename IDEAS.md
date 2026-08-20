@@ -1,4 +1,4 @@
-# Ideas
+# WIP Features/Changes
 
 Drop anything here — one line or a whole paragraph, doesn't need to be polished.
 When you want one built, just point me at it (or say "build the next one").
