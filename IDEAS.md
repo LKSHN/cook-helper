@@ -3,6 +3,20 @@
 Drop anything here — one line or a whole paragraph, doesn't need to be polished.
 When you want one built, just point me at it (or say "build the next one").
 
+- Changes sort name: Change container sorting by color sorting (which is the same idea but a different name)
+
+- Ingredients input of recipe edit view: 
+    - Can you also make it apply or force some sort of norm (like "Butter Sliced" type of norm) so the list looks more consistent and professional
+    - Make it show the list of similar ingredient or some sort of autofilling proposal so it's easier to add ingredient that is present in another recipe    
+
+- Recipe edit view: I want to be able to change the two colors we have for each ingredient (one is for the container color, which is used in the recap view and the after mep list, and the other which is more about the time needed to prep them so it sort it out, that will be used for the before mep list)
+
+- MEP After List: I want to have the ability to change caracteristics of an ingredient 
+
+- Data structure: Want to work on something that could scale later on :
+    - maybe something more "proper" like a table for recipes, for the recap view, that has ingredients linked into another table for them that will be used for the mep list
+    - a table for the mep before list would be cleaner i think
+
 - Shop tab: currently just a placeholder ("Shop is coming soon.") — build out what it should actually do
 
 ## Done
