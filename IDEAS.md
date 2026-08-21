@@ -9,6 +9,8 @@ When you want one built, just point me at it (or say "build the next one").
 
 - Recipe edit view: I want to be able to change the two colors we have for each ingredient (one is for the container color, which is used in the recap view and the after mep list, and the other which is more about the time needed to prep them so it sort it out, that will be used for the before mep list)
 
+- MEP Before: remove the quantity thing, and put an optional comment section
+
 - Shop tab: currently just a placeholder ("Shop is coming soon.") — build out what it should actually do
 
 ## Done
