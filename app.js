@@ -8,10 +8,10 @@ let openCardMenuId = null;
 let activeView = 'recap';
 let mepMode = 'before';
 let shopMode = 'list';
-// 'added' keeps Firestore array order (insertion order); 'container'
-// groups items by their (resolved) color tag, in palette order, with
-// no-color items — including every free-form item — last. Not persisted,
-// same as mepBeforeSort/mepAfterSort.
+// 'added' keeps Firestore array order (insertion order); 'prep' and
+// 'container' group items by that resolved color tag, in palette order,
+// with no-color items — including every free-form item — last. Not
+// persisted, same as mepBeforeSort.
 let shopListSort = 'added';
 
 // MEP Before list: one document per item (mepBeforeItems), referencing a
@@ -819,6 +819,12 @@ function resolveShopItemColor(item) {
   return canonical ? (canonical.color || '') : '';
 }
 
+function resolveShopItemPrepColor(item) {
+  if (!item.ingredientId) return '';
+  const canonical = ingredientsById.get(item.ingredientId);
+  return canonical ? (canonical.prepColor || '') : '';
+}
+
 function addToShopList(ingredientId) {
   if (shopItems.some(i => i.ingredientId === ingredientId)) return;
   RailDB.putShopItem({ id: uid(), ingredientId, name: null, addedAt: Date.now() });
@@ -852,8 +858,13 @@ function renderShop() {
 }
 
 function sortedShopItems() {
-  if (shopListSort !== 'container') return shopItems;
-  return [...shopItems].sort((a, b) => colorSortIndex(resolveShopItemColor(a)) - colorSortIndex(resolveShopItemColor(b)));
+  if (shopListSort === 'prep') {
+    return [...shopItems].sort((a, b) => colorSortIndex(resolveShopItemPrepColor(a)) - colorSortIndex(resolveShopItemPrepColor(b)));
+  }
+  if (shopListSort === 'container') {
+    return [...shopItems].sort((a, b) => colorSortIndex(resolveShopItemColor(a)) - colorSortIndex(resolveShopItemColor(b)));
+  }
+  return shopItems;
 }
 
 shopSortTabs.addEventListener('click', (e) => {
@@ -901,21 +912,42 @@ function renderShopList() {
     return;
   }
 
+  // Same swap as MEP Before: the swatch shows/edits whichever color the
+  // active sort is grouping by, so what you see matches the ordering.
+  // Free-form items (no canonical ingredient) never get a swatch — there's
+  // no color to show or edit.
+  const showingContainer = shopListSort === 'container';
+  const swatchClass = showingContainer ? 'ing-color-btn' : 'ing-prep-color-btn';
+  const swatchLabel = showingContainer ? 'Set container color' : 'Set prep-time color';
+
   sortedShopItems().forEach(item => {
     const name = resolveShopItemName(item);
-    const color = resolveShopItemColor(item);
-    const dot = color ? `<span class="ing-dot" style="background:${color}"></span>` : '';
+    const canonical = item.ingredientId ? ingredientsById.get(item.ingredientId) : null;
+    const displayColor = canonical ? ((showingContainer ? canonical.color : canonical.prepColor) || '') : '';
+    const swatchHtml = canonical
+      ? `<button type="button" class="${swatchClass}" aria-label="${swatchLabel}" style="${displayColor ? `background:${displayColor}` : ''}"></button>`
+      : '';
 
     const row = document.createElement('div');
     row.className = 'mep-row';
     row.innerHTML = `
       <button type="button" class="mep-check" aria-label="Mark bought">&#10003;</button>
-      <span class="mep-row-name">${dot}${escapeHtml(name)}</span>
+      ${swatchHtml}
+      <span class="mep-row-name">${escapeHtml(name)}</span>
       <button type="button" class="mep-row-remove" aria-label="Remove">&times;</button>
     `;
 
     row.querySelector('.mep-check').addEventListener('click', () => removeShopItem(item.id));
     row.querySelector('.mep-row-remove').addEventListener('click', () => removeShopItem(item.id));
+    if (canonical) {
+      row.querySelector(`.${swatchClass}`).addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleColorPicker(row, displayColor, (newColor) => {
+          const patch = showingContainer ? { color: newColor } : { prepColor: newColor };
+          RailDB.putIngredient({ ...canonical, ...patch });
+        });
+      });
+    }
 
     shopListEl.appendChild(row);
   });

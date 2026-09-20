@@ -58,7 +58,7 @@ When you want one built, just point me at it (or say "build the next one").
 
 - Shop tab split into two sub-tabs, same source/result split as MEP's After/Before: "Add" lists every ingredient regardless of recipe usage or MEP-exclusion (so something like "Beurre", excluded from prep, can still be shopped for) with a toggle per row, plus the free-form input for one-off items that aren't a recipe ingredient at all; "List" is the resulting checklist, unchanged. Shop's own "+ Shop" toggle on the MEP After list still works as a second way to add.
 
-- Shop List sort: added the same "Order added" / "By color" sort toggle the MEP lists have, sorting by each item's resolved color (an ingredient's container color, or uncolored for free-form items) — same palette-order grouping logic, no-color items last.
+- Shop List sort: same three-way "Order added" / "By prep color" / "By container color" sort MEP Before has, sorting by each item's resolved color (free-form items, with no linked ingredient, always sort last). The swatch shows/edits whichever color the active sort is grouping by, same as Before's.
 
 - MEP Before's "By color" sort tab relabeled to "By prep color" — it already sorted by the prep-time color (not the container color shown in Recap/After), but the shared "By color" label on both Before and After made that easy to miss since they secretly meant two different fields.
 
