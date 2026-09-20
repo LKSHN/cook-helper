@@ -130,13 +130,29 @@ function loadIngredients() {
 }
 
 // Resolves a recipe's embedded ingredient entry to a display-ready
-// {name, color} pair via the canonical ingredients/{id} record.
+// {name, color, prepColor} triple via the canonical ingredients/{id} record.
 function resolveIngredientDisplay(ing) {
   const canonical = ingredientsById.get(ing.ingredientId);
   return {
     name: canonical ? canonical.name : '',
-    color: canonical ? (canonical.color || '') : ''
+    color: canonical ? (canonical.color || '') : '',
+    prepColor: canonical ? (canonical.prepColor || '') : ''
   };
+}
+
+// Loose "Title Case" pass applied when a brand-new canonical ingredient is
+// created (see resolveIngredientIdForRow) and on blur of an ingredient-name
+// field, so freshly-typed names land consistent ("sliced butter" ->
+// "Sliced Butter") without forcibly renaming everything that already
+// exists — case differences don't affect matching (existingKey already
+// lowercases), this is purely cosmetic.
+function normalizeIngredientName(name) {
+  return name
+    .trim()
+    .replace(/\s+/g, ' ')
+    .split(' ')
+    .map(word => (word ? word[0].toUpperCase() + word.slice(1).toLowerCase() : word))
+    .join(' ');
 }
 
 function filteredRecipes() {
@@ -343,23 +359,25 @@ function colorSortIndex(color) {
   return i === -1 ? INGREDIENT_COLORS.length : i;
 }
 
-// A Before item's color always comes from its canonical ingredient now —
-// editing it (see renderMepBefore) is "everywhere", same as the After
-// list's color button, since color no longer has anywhere per-item to
-// live independently.
-function beforeItemColor(item) {
+// The Before list sorts/displays by prep-time color, not container color —
+// container color is the Recap/After-list concept (see resolveIngredientDisplay);
+// prep color is the "how long this takes to prep" tag used to group the
+// Before list. Both live on the same canonical ingredient record. Editing
+// it (see renderMepBefore) is "everywhere", same as the After list's color
+// button, since color no longer has anywhere per-item to live independently.
+function beforeItemPrepColor(item) {
   const canonical = ingredientsById.get(item.ingredientId);
-  return canonical ? (canonical.color || '') : '';
+  return canonical ? (canonical.prepColor || '') : '';
 }
 
 // 'added' keeps Firestore array order (insertion order); 'container'
-// groups items by their color tag, in palette order, with no-container
+// groups items by their prep-color tag, in palette order, with no-color
 // items last. Not persisted — purely a local view preference.
 let mepBeforeSort = 'added';
 
 function sortedMepBefore() {
   if (mepBeforeSort !== 'container') return mepBefore;
-  return [...mepBefore].sort((a, b) => colorSortIndex(beforeItemColor(a)) - colorSortIndex(beforeItemColor(b)));
+  return [...mepBefore].sort((a, b) => colorSortIndex(beforeItemPrepColor(a)) - colorSortIndex(beforeItemPrepColor(b)));
 }
 
 mepSortTabs.addEventListener('click', (e) => {
@@ -380,27 +398,27 @@ function renderMepBefore() {
   sortedMepBefore().forEach(item => {
     const canonical = ingredientsById.get(item.ingredientId);
     const name = canonical ? canonical.name : '';
-    const color = canonical ? (canonical.color || '') : '';
+    const prepColor = canonical ? (canonical.prepColor || '') : '';
 
     const row = document.createElement('div');
     row.className = 'mep-row';
     row.innerHTML = `
       <button type="button" class="mep-check" aria-label="Mark prepped">&#10003;</button>
-      <button type="button" class="ing-color-btn" aria-label="Set container color" style="${color ? `background:${color}` : ''}"></button>
+      <button type="button" class="ing-prep-color-btn" aria-label="Set prep-time color" style="${prepColor ? `background:${prepColor}` : ''}"></button>
       <span class="mep-row-name">${escapeHtml(name)}</span>
-      <input type="text" class="ing-amount" placeholder="Qty" value="${escapeHtml(item.amount || '')}">
+      <input type="text" class="mep-comment" placeholder="Note (optional)" value="${escapeHtml(item.comment || '')}">
       <button type="button" class="mep-row-remove" aria-label="Remove">&times;</button>
     `;
 
     row.querySelector('.mep-check').addEventListener('click', () => removeFromBeforeList(item.id));
     row.querySelector('.mep-row-remove').addEventListener('click', () => removeFromBeforeList(item.id));
-    row.querySelector('.ing-amount').addEventListener('change', (e) => {
-      updateBeforeItem(item.id, { amount: e.target.value.trim() });
+    row.querySelector('.mep-comment').addEventListener('change', (e) => {
+      updateBeforeItem(item.id, { comment: e.target.value.trim() });
     });
-    row.querySelector('.ing-color-btn').addEventListener('click', (e) => {
+    row.querySelector('.ing-prep-color-btn').addEventListener('click', (e) => {
       e.stopPropagation();
-      toggleColorPicker(row, color, (newColor) => {
-        if (canonical) RailDB.putIngredient({ ...canonical, color: newColor });
+      toggleColorPicker(row, prepColor, (newColor) => {
+        if (canonical) RailDB.putIngredient({ ...canonical, prepColor: newColor });
       });
     });
 
@@ -699,13 +717,13 @@ document.addEventListener('click', (e) => {
 
 // Each doc is its own write now (mepBeforeItems), not a whole-array
 // overwrite — two devices adding/editing/removing different items at once
-// no longer clobber each other. Color isn't stored here at all: it always
-// resolves from the canonical ingredient (see beforeItemColor), so there's
-// nothing to inherit or keep independent — editing it is "everywhere",
-// same as the After list's color button.
+// no longer clobber each other. Prep color isn't stored here at all: it
+// always resolves from the canonical ingredient (see beforeItemPrepColor),
+// so there's nothing to inherit or keep independent — editing it is
+// "everywhere", same as the After list's container-color button.
 function addToBeforeList(ingredientId, unit) {
   if (mepBefore.some(i => i.ingredientId === ingredientId)) return;
-  RailDB.putMepBeforeItem({ id: uid(), ingredientId, amount: '', unit: unit || '', addedAt: Date.now() });
+  RailDB.putMepBeforeItem({ id: uid(), ingredientId, comment: '', unit: unit || '', addedAt: Date.now() });
 }
 
 function removeFromBeforeList(id) {
@@ -803,8 +821,8 @@ function openForm(id) {
     document.getElementById('fNotes').value = r.notes || '';
     (r.ingredients || []).forEach(ing => {
       if (ing.type === 'separator') { addSeparatorRow(ing.name); return; }
-      const { name, color } = resolveIngredientDisplay(ing);
-      addIngredientRow(name, ing.amount, ing.unit, color, ing.ingredientId || null);
+      const { name, color, prepColor } = resolveIngredientDisplay(ing);
+      addIngredientRow(name, ing.amount, ing.unit, color, prepColor, ing.ingredientId || null);
     });
     (r.steps || []).forEach(step => addStepRow(step));
     formPhotos = (r.photos || []).slice();
@@ -981,10 +999,11 @@ function wireReorderButtons(row) {
 // tell whether the row is still "the same ingredient" (typed name
 // unchanged) or should look up/create a different one (typed name
 // changed) — see resolveIngredientIdForRow.
-function addIngredientRow(name = '', amount = '', unit = '', color = '', ingredientId = null) {
+function addIngredientRow(name = '', amount = '', unit = '', color = '', prepColor = '', ingredientId = null) {
   const row = document.createElement('div');
   row.className = 'ingredient-row';
   row.dataset.color = color;
+  row.dataset.prepColor = prepColor;
   row.dataset.ingredientId = ingredientId || '';
   row.dataset.boundName = name;
   // Local staging for a row not yet bound to any canonical ingredient
@@ -999,6 +1018,7 @@ function addIngredientRow(name = '', amount = '', unit = '', color = '', ingredi
   }).join('');
   row.innerHTML = `
     <button type="button" class="ing-color-btn" aria-label="Set ingredient color" style="${color ? `background:${color}` : ''}"></button>
+    <button type="button" class="ing-prep-color-btn" aria-label="Set prep-time color" title="Prep-time color — sorts the MEP Before list" style="${prepColor ? `background:${prepColor}` : ''}"></button>
     <input type="text" placeholder="Ingredient" class="ing-name" value="${escapeHtml(name)}">
     <input type="text" placeholder="Qty" class="ing-amount" value="${escapeHtml(amount)}">
     <select class="ing-unit">${unitOptions}</select>
@@ -1026,6 +1046,17 @@ function addIngredientRow(name = '', amount = '', unit = '', color = '', ingredi
       }
     });
   });
+  row.querySelector('.ing-prep-color-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleColorPicker(row, row.dataset.prepColor || '', (color) => {
+      row.dataset.prepColor = color;
+      row.querySelector('.ing-prep-color-btn').style.background = color || '';
+      if (row.dataset.ingredientId) {
+        const current = ingredientsById.get(row.dataset.ingredientId);
+        if (current) RailDB.putIngredient({ ...current, prepColor: color });
+      }
+    });
+  });
   row.querySelector('.ing-mep-btn').addEventListener('click', (e) => {
     e.stopPropagation();
     const currentName = row.querySelector('.ing-name').value.trim();
@@ -1042,11 +1073,82 @@ function addIngredientRow(name = '', amount = '', unit = '', color = '', ingredi
   });
   // The MEP toggle's state is keyed by ingredient name, not by this row —
   // re-sync it live as the name changes so typing "Salt" immediately shows
-  // whatever the shared setting for "Salt" already is.
-  row.querySelector('.ing-name').addEventListener('input', () => syncMepButton(row));
+  // whatever the shared setting for "Salt" already is. Same input also
+  // drives the "reuse an existing ingredient" autocomplete below it.
+  const nameInput = row.querySelector('.ing-name');
+  nameInput.addEventListener('input', () => {
+    syncMepButton(row);
+    showIngredientAutocomplete(row);
+  });
+  nameInput.addEventListener('blur', () => {
+    const normalized = normalizeIngredientName(nameInput.value);
+    if (normalized !== nameInput.value) nameInput.value = normalized;
+  });
   ingredientRows.appendChild(row);
   syncMepButton(row);
 }
+
+// Suggests existing canonical ingredients matching what's typed so far
+// (accent/case-insensitive substring, closest match first), so reusing
+// "Ciboulette" from another recipe doesn't require spelling it exactly.
+// Picking a suggestion binds the row to that ingredient outright — same
+// effect as typing its exact name — and carries over its color so the
+// swatch updates immediately instead of waiting for save.
+let openAutocompleteRow = null;
+
+function matchIngredients(query, limit = 6) {
+  const q = stripAccents(query.trim().toLowerCase());
+  if (!q) return [];
+  return ingredients
+    .map(ing => ({ ing, idx: stripAccents(ing.name.toLowerCase()).indexOf(q) }))
+    .filter(m => m.idx !== -1)
+    .sort((a, b) => a.idx - b.idx || a.ing.name.localeCompare(b.ing.name))
+    .slice(0, limit)
+    .map(m => m.ing);
+}
+
+function showIngredientAutocomplete(row) {
+  const input = row.querySelector('.ing-name');
+  const matches = matchIngredients(input.value);
+  closeIngredientAutocomplete();
+  if (!matches.length) return;
+
+  const box = document.createElement('div');
+  box.className = 'ing-autocomplete';
+  box.innerHTML = matches.map(m => `
+    <button type="button" class="ing-autocomplete-item" data-id="${m.id}">
+      ${m.color ? `<span class="ing-dot" style="background:${m.color}"></span>` : ''}${escapeHtml(m.name)}
+    </button>
+  `).join('');
+  box.querySelectorAll('.ing-autocomplete-item').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const match = matches.find(m => m.id === btn.dataset.id);
+      input.value = match.name;
+      row.dataset.ingredientId = match.id;
+      row.dataset.boundName = match.name;
+      row.dataset.color = match.color || '';
+      row.querySelector('.ing-color-btn').style.background = match.color || '';
+      row.dataset.prepColor = match.prepColor || '';
+      row.querySelector('.ing-prep-color-btn').style.background = match.prepColor || '';
+      closeIngredientAutocomplete();
+      syncMepButton(row);
+    });
+  });
+  row.appendChild(box);
+  openAutocompleteRow = row;
+}
+
+function closeIngredientAutocomplete() {
+  if (!openAutocompleteRow) return;
+  const box = openAutocompleteRow.querySelector('.ing-autocomplete');
+  if (box) box.remove();
+  openAutocompleteRow = null;
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.ing-autocomplete') && !e.target.closest('.ing-name')) closeIngredientAutocomplete();
+});
 
 function syncMepButton(row) {
   const name = row.querySelector('.ing-name').value.trim();
@@ -1166,9 +1268,9 @@ async function resolveIngredientIdForRow(row) {
 
   const created = {
     id: uid(),
-    name,
+    name: normalizeIngredientName(name),
     color,
-    prepColor: '',
+    prepColor: row.dataset.prepColor || '',
     mep: row.dataset.mepIncluded !== 'false',
     defaultUnit: ''
   };

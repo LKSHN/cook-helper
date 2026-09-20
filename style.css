@@ -278,6 +278,12 @@ button, input, select, textarea{ font-family:inherit; }
   flex:0 0 auto; width:24px; height:24px; border-radius:50%;
   border:2px solid var(--border); background:transparent; cursor:pointer; padding:0;
 }
+/* Square, vs. the container color's circle — the second, independent
+   color tag used to sort the MEP Before list by prep time. */
+.ing-prep-color-btn{
+  flex:0 0 auto; width:24px; height:24px; border-radius:6px;
+  border:2px solid var(--border); background:transparent; cursor:pointer; padding:0;
+}
 /* Whether an ingredient shows up in the MEP After list — on by default,
    tap to exclude things that never need prepping (e.g. salt, water). */
 .ing-mep-btn{
@@ -302,6 +308,21 @@ button, input, select, textarea{ font-family:inherit; }
   border-color:var(--border); background:none; color:var(--text-dim);
   font-size:12px; line-height:1; display:flex; align-items:center; justify-content:center;
 }
+
+/* Ingredient-name autocomplete — suggests existing canonical ingredients
+   matching what's typed, so reusing one doesn't need an exact spelling. */
+.ing-autocomplete{
+  position:absolute; top:100%; left:0; right:0; margin-top:4px; z-index:10;
+  display:flex; flex-direction:column; gap:2px; max-height:220px; overflow-y:auto;
+  background:var(--surface-raised); border:1px solid var(--border);
+  border-radius:10px; padding:6px; box-shadow:0 8px 24px rgba(0,0,0,0.35);
+}
+.ing-autocomplete-item{
+  display:flex; align-items:center; text-align:left;
+  background:none; border:none; color:var(--text);
+  font-size:13.5px; padding:9px 10px; border-radius:7px; cursor:pointer;
+}
+.ing-autocomplete-item:active{ background:var(--surface); }
 .row-remove{
   flex:0 0 auto; background:var(--surface); border:1px solid var(--border);
   color:var(--danger); border-radius:8px; width:38px; height:38px; font-size:16px; cursor:pointer;
@@ -475,8 +496,8 @@ button, input, select, textarea{ font-family:inherit; }
 }
 .mep-check:active{ background:var(--surface-raised); }
 .mep-row-name{ flex:1; min-width:0; font-size:14.5px; }
-.mep-row .ing-amount{
-  flex:0 0 64px; width:64px; padding:8px 10px;
+.mep-row .mep-comment{
+  flex:1; min-width:0; padding:8px 10px;
   background:var(--surface-raised); border:1px solid var(--border);
   border-radius:8px; color:var(--text); font-size:13px;
 }
