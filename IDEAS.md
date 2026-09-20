@@ -53,3 +53,7 @@ When you want one built, just point me at it (or say "build the next one").
 - MEP Before: dropped the quantity field — replaced with a free-text, optional comment/note field per item.
 
 - Shop tab: built out as a restock checklist — check an item off once you've bought it, same "tap to remove" interaction as the MEP Before list. Items either come from the MEP After list (a new "+ Shop" button alongside the existing "+ Prep" one, so an ingredient can go to either list independently) or get typed straight into the Shop tab for things that aren't a recipe ingredient at all (paper towels, cleaning supplies). Synced via its own `shopItems` collection, same one-doc-per-item pattern as the Before list.
+
+- MEP After Prep/Shop buttons are now toggles: tapping an already-checked "✓ Prep" or "✓ Shop" removes it from that list directly, instead of the button just going disabled once added.
+
+- Shop tab split into two sub-tabs, same source/result split as MEP's After/Before: "Add" lists every ingredient regardless of recipe usage or MEP-exclusion (so something like "Beurre", excluded from prep, can still be shopped for) with a toggle per row, plus the free-form input for one-off items that aren't a recipe ingredient at all; "List" is the resulting checklist, unchanged. Shop's own "+ Shop" toggle on the MEP After list still works as a second way to add.

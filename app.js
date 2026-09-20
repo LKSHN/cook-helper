@@ -7,6 +7,7 @@ let openCardMenuId = null;
 
 let activeView = 'recap';
 let mepMode = 'before';
+let shopMode = 'list';
 
 // MEP Before list: one document per item (mepBeforeItems), referencing a
 // canonical ingredient by id rather than embedding its own name/color.
@@ -40,8 +41,10 @@ const mepAfterSortTabs = document.getElementById('mepAfterSortTabs');
 const mepBeforeListEl = document.getElementById('mepBeforeList');
 const mepAfterListEl = document.getElementById('mepAfterList');
 
+const shopModeTabs = document.getElementById('shopModeTabs');
 const shopAddForm = document.getElementById('shopAddForm');
 const shopAddInput = document.getElementById('shopAddInput');
+const shopIngredientListEl = document.getElementById('shopIngredientList');
 const shopListEl = document.getElementById('shopList');
 
 const STATION_ORDER = ['starters', 'mains', 'desserts'];
@@ -768,11 +771,12 @@ function updateBeforeItem(id, patch) {
   RailDB.putMepBeforeItem({ ...item, ...patch });
 }
 
-// ---- Shop tab: a restock checklist ----
-// An item either references a canonical ingredient (added from the MEP
-// After list — resolves its name/color live, same as Before-list items)
-// or is free-form (typed directly here, for things like paper towels that
-// aren't a recipe ingredient at all).
+// ---- Shop tab: "Add" (browse/pick what goes on the list) + "List" (the
+// resulting restock checklist) — same source/result split as MEP's
+// After/Before. A shop item either references a canonical ingredient
+// (picked from the Add tab or the MEP After list — resolves its
+// name/color live) or is free-form (typed into the Add tab's input, for
+// things like paper towels that aren't a recipe ingredient at all).
 function resolveShopItemName(item) {
   if (!item.ingredientId) return item.name || '';
   const canonical = ingredientsById.get(item.ingredientId);
@@ -800,10 +804,56 @@ function removeShopItem(id) {
   RailDB.removeShopItem(id);
 }
 
+shopModeTabs.addEventListener('click', (e) => {
+  const btn = e.target.closest('.mep-mode-tab');
+  if (!btn) return;
+  shopMode = btn.dataset.mode;
+  [...shopModeTabs.children].forEach(t => t.classList.toggle('active', t === btn));
+  renderShop();
+});
+
 function renderShop() {
+  shopAddForm.hidden = shopMode !== 'add';
+  shopIngredientListEl.hidden = shopMode !== 'add';
+  shopListEl.hidden = shopMode !== 'list';
+  if (shopMode === 'add') renderShopAdd();
+  else renderShopList();
+}
+
+// Every canonical ingredient, regardless of whether any recipe currently
+// uses it or it's excluded from MEP — deliberately broader than the MEP
+// After list's aggregatedIngredients(), since something can need
+// restocking whether or not it's currently on a recipe or a prep list.
+function renderShopAdd() {
+  shopIngredientListEl.innerHTML = '';
+  const items = [...ingredients].sort((a, b) => a.name.localeCompare(b.name));
+  if (!items.length) {
+    shopIngredientListEl.innerHTML = '<div class="mep-empty">No ingredients yet.<br>Add some recipes on the Recap tab, or type a one-off item above.</div>';
+    return;
+  }
+
+  items.forEach(ing => {
+    const shopItem = shopItems.find(i => i.ingredientId === ing.id);
+    const dot = ing.color ? `<span class="ing-dot" style="background:${ing.color}"></span>` : '';
+
+    const row = document.createElement('div');
+    row.className = 'mep-add-row';
+    row.innerHTML = `
+      <span class="mep-add-name">${dot}${escapeHtml(ing.name)}</span>
+      <button type="button" class="mep-add-btn${shopItem ? ' active' : ''}" aria-label="${shopItem ? 'Remove from shopping list' : 'Add to shopping list'}">${shopItem ? '&check;' : '+'}</button>
+    `;
+    row.querySelector('.mep-add-btn').addEventListener('click', () => {
+      if (shopItem) removeShopItem(shopItem.id);
+      else addToShopList(ing.id);
+    });
+    shopIngredientListEl.appendChild(row);
+  });
+}
+
+function renderShopList() {
   shopListEl.innerHTML = '';
   if (!shopItems.length) {
-    shopListEl.innerHTML = '<div class="mep-empty">Nothing to buy yet.<br>Add an item above, or from the MEP After tab.</div>';
+    shopListEl.innerHTML = '<div class="mep-empty">Nothing to buy yet.<br>Add something from the Add tab.</div>';
     return;
   }
 

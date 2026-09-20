@@ -80,14 +80,23 @@
     <div id="mepAfterList" class="mep-list" hidden></div>
   </div>
 
-  <!-- Shop view: a restock checklist — check an item off once you've
-       bought it. Items come from the MEP After list ("+ Shop") or get
-       typed in directly here for things that aren't a recipe ingredient. -->
+  <!-- Shop view: "Add" browses every ingredient (used in a recipe or not,
+       MEP-excluded or not) plus a free-form field for one-off items that
+       aren't a recipe ingredient at all; "List" is the resulting restock
+       checklist — check an item off once you've bought it. Same
+       source/result split as MEP's After/Before. -->
   <div id="shopView" class="view" hidden>
-    <form id="shopAddForm" class="shop-add-form">
+    <nav class="mep-mode-tabs" id="shopModeTabs">
+      <button class="mep-mode-tab" data-mode="add">Add</button>
+      <button class="mep-mode-tab active" data-mode="list">List</button>
+    </nav>
+
+    <form id="shopAddForm" class="shop-add-form" hidden>
       <input type="text" id="shopAddInput" placeholder="Add an item (e.g. paper towels)" autocomplete="off">
       <button type="submit" class="shop-add-submit" aria-label="Add item">+</button>
     </form>
+
+    <div id="shopIngredientList" class="mep-list" hidden></div>
     <div id="shopList" class="mep-list"></div>
   </div>
 
