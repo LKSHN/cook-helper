@@ -60,6 +60,8 @@ When you want one built, just point me at it (or say "build the next one").
 
 - Shop List sort: same three-way "Order added" / "By prep color" / "By container color" sort MEP Before has, sorting by each item's resolved color (free-form items, with no linked ingredient, always sort last). The swatch shows/edits whichever color the active sort is grouping by, same as Before's.
 
+- Shop Add sort: same idea on the Add tab too, but "Alphabetical" / "By prep color" / "By container color" — defaulting to container color (not prep) since this is a browse-everything list like the MEP After tab, which has always shown container color as its one color. Only picking "By prep color" switches the swatch over.
+
 - MEP Before's "By color" sort tab relabeled to "By prep color" — it already sorted by the prep-time color (not the container color shown in Recap/After), but the shared "By color" label on both Before and After made that easy to miss since they secretly meant two different fields.
 
 - MEP Before now also has a "By container color" sort (alongside "Order added" and "By prep color") — so it can be grouped either by the Recap/After container color or the Before-specific prep color, not just one or the other. Its swatch switches to show (and edit) whichever color the active sort is grouping by, so what you see always matches the ordering. The After list's own sort got relabeled "By container color" too, for symmetry now that "color" isn't ambiguous between the two lists.

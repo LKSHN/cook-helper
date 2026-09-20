@@ -13,6 +13,12 @@ let shopMode = 'list';
 // with no-color items — including every free-form item — last. Not
 // persisted, same as mepBeforeSort.
 let shopListSort = 'added';
+// 'name' is alphabetical, matching every ingredient existing regardless of
+// order; 'prep'/'container' group by that color, in palette order — same
+// idea as shopListSort, but defaulting to container color (not prep) since
+// this is a browse-everything list like the MEP After tab, which has
+// always shown container color as its one color.
+let shopAddSort = 'name';
 
 // MEP Before list: one document per item (mepBeforeItems), referencing a
 // canonical ingredient by id rather than embedding its own name/color.
@@ -49,6 +55,7 @@ const mepAfterListEl = document.getElementById('mepAfterList');
 const shopModeTabs = document.getElementById('shopModeTabs');
 const shopAddForm = document.getElementById('shopAddForm');
 const shopAddInput = document.getElementById('shopAddInput');
+const shopAddSortTabs = document.getElementById('shopAddSortTabs');
 const shopSortTabs = document.getElementById('shopSortTabs');
 const shopIngredientListEl = document.getElementById('shopIngredientList');
 const shopListEl = document.getElementById('shopList');
@@ -850,6 +857,7 @@ shopModeTabs.addEventListener('click', (e) => {
 
 function renderShop() {
   shopAddForm.hidden = shopMode !== 'add';
+  shopAddSortTabs.hidden = shopMode !== 'add';
   shopIngredientListEl.hidden = shopMode !== 'add';
   shopSortTabs.hidden = shopMode !== 'list';
   shopListEl.hidden = shopMode !== 'list';
@@ -879,24 +887,58 @@ shopSortTabs.addEventListener('click', (e) => {
 // uses it or it's excluded from MEP — deliberately broader than the MEP
 // After list's aggregatedIngredients(), since something can need
 // restocking whether or not it's currently on a recipe or a prep list.
+function sortedShopAddItems(items) {
+  if (shopAddSort === 'prep') {
+    return [...items].sort((a, b) => colorSortIndex(a.prepColor || '') - colorSortIndex(b.prepColor || ''));
+  }
+  if (shopAddSort === 'container') {
+    return [...items].sort((a, b) => colorSortIndex(a.color || '') - colorSortIndex(b.color || ''));
+  }
+  return items;
+}
+
+shopAddSortTabs.addEventListener('click', (e) => {
+  const btn = e.target.closest('.mep-sort-tab');
+  if (!btn) return;
+  shopAddSort = btn.dataset.sort;
+  [...shopAddSortTabs.children].forEach(t => t.classList.toggle('active', t === btn));
+  renderShopAdd();
+});
+
 function renderShopAdd() {
   shopIngredientListEl.innerHTML = '';
-  const items = [...ingredients].sort((a, b) => a.name.localeCompare(b.name));
+  const alphabetical = [...ingredients].sort((a, b) => a.name.localeCompare(b.name));
+  const items = sortedShopAddItems(alphabetical);
   if (!items.length) {
     shopIngredientListEl.innerHTML = '<div class="mep-empty">No ingredients yet.<br>Add some recipes on the Recap tab, or type a one-off item above.</div>';
     return;
   }
 
+  // Alphabetical and "By container color" both show/edit container color —
+  // the Recap/After default, and this is a browse-everything list like
+  // After. Only "By prep color" switches the swatch to the prep-time one.
+  const showingPrep = shopAddSort === 'prep';
+  const swatchClass = showingPrep ? 'ing-prep-color-btn' : 'ing-color-btn';
+  const swatchLabel = showingPrep ? 'Set prep-time color' : 'Set container color';
+
   items.forEach(ing => {
     const shopItem = shopItems.find(i => i.ingredientId === ing.id);
-    const dot = ing.color ? `<span class="ing-dot" style="background:${ing.color}"></span>` : '';
+    const displayColor = (showingPrep ? ing.prepColor : ing.color) || '';
 
     const row = document.createElement('div');
     row.className = 'mep-add-row';
     row.innerHTML = `
-      <span class="mep-add-name">${dot}${escapeHtml(ing.name)}</span>
+      <button type="button" class="${swatchClass}" aria-label="${swatchLabel}" style="${displayColor ? `background:${displayColor}` : ''}"></button>
+      <span class="mep-add-name">${escapeHtml(ing.name)}</span>
       <button type="button" class="mep-add-btn${shopItem ? ' active' : ''}" aria-label="${shopItem ? 'Remove from shopping list' : 'Add to shopping list'}">${shopItem ? '&check;' : '+'}</button>
     `;
+    row.querySelector(`.${swatchClass}`).addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleColorPicker(row, displayColor, (newColor) => {
+        const patch = showingPrep ? { prepColor: newColor } : { color: newColor };
+        RailDB.putIngredient({ ...ing, ...patch });
+      });
+    });
     row.querySelector('.mep-add-btn').addEventListener('click', () => {
       if (shopItem) removeShopItem(shopItem.id);
       else addToShopList(ing.id);
