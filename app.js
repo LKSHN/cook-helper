@@ -399,11 +399,10 @@ function beforeItemPrepColor(item) {
   return canonical ? (canonical.prepColor || '') : '';
 }
 
-// The Before list's own swatch/default sort is prep color (see
-// renderMepBefore), but the underlying ingredient's container color — the
-// Recap/After-list one — is still useful to group by here too, so both
-// are available as sorts even though only prep color is edited from this
-// list.
+// The Before list's default sort/swatch is prep color, but the underlying
+// ingredient's container color — the Recap/After-list one — is still
+// useful to group by here too (see renderMepBefore, which swaps the
+// swatch to show/edit whichever color the active sort is grouping by).
 function beforeItemColor(item) {
   const canonical = ingredientsById.get(item.ingredientId);
   return canonical ? (canonical.color || '') : '';
@@ -439,16 +438,24 @@ function renderMepBefore() {
     return;
   }
 
+  // The swatch shows (and edits) whichever color the current sort is
+  // grouping by — container color while sorted "By container color",
+  // prep color otherwise (including the default "Order added") — so
+  // what you see always matches what determined the ordering.
+  const showingContainer = mepBeforeSort === 'container';
+  const swatchClass = showingContainer ? 'ing-color-btn' : 'ing-prep-color-btn';
+  const swatchLabel = showingContainer ? 'Set container color' : 'Set prep-time color';
+
   sortedMepBefore().forEach(item => {
     const canonical = ingredientsById.get(item.ingredientId);
     const name = canonical ? canonical.name : '';
-    const prepColor = canonical ? (canonical.prepColor || '') : '';
+    const displayColor = canonical ? ((showingContainer ? canonical.color : canonical.prepColor) || '') : '';
 
     const row = document.createElement('div');
     row.className = 'mep-row';
     row.innerHTML = `
       <button type="button" class="mep-check" aria-label="Mark prepped">&#10003;</button>
-      <button type="button" class="ing-prep-color-btn" aria-label="Set prep-time color" style="${prepColor ? `background:${prepColor}` : ''}"></button>
+      <button type="button" class="${swatchClass}" aria-label="${swatchLabel}" style="${displayColor ? `background:${displayColor}` : ''}"></button>
       <span class="mep-row-name">${escapeHtml(name)}</span>
       <input type="text" class="mep-comment" placeholder="Note (optional)" value="${escapeHtml(item.comment || '')}">
       <button type="button" class="mep-row-remove" aria-label="Remove">&times;</button>
@@ -459,10 +466,12 @@ function renderMepBefore() {
     row.querySelector('.mep-comment').addEventListener('change', (e) => {
       updateBeforeItem(item.id, { comment: e.target.value.trim() });
     });
-    row.querySelector('.ing-prep-color-btn').addEventListener('click', (e) => {
+    row.querySelector(`.${swatchClass}`).addEventListener('click', (e) => {
       e.stopPropagation();
-      toggleColorPicker(row, prepColor, (newColor) => {
-        if (canonical) RailDB.putIngredient({ ...canonical, prepColor: newColor });
+      toggleColorPicker(row, displayColor, (newColor) => {
+        if (!canonical) return;
+        const patch = showingContainer ? { color: newColor } : { prepColor: newColor };
+        RailDB.putIngredient({ ...canonical, ...patch });
       });
     });
 
