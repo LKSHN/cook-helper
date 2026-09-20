@@ -8,6 +8,11 @@ let openCardMenuId = null;
 let activeView = 'recap';
 let mepMode = 'before';
 let shopMode = 'list';
+// 'added' keeps Firestore array order (insertion order); 'container'
+// groups items by their (resolved) color tag, in palette order, with
+// no-color items — including every free-form item — last. Not persisted,
+// same as mepBeforeSort/mepAfterSort.
+let shopListSort = 'added';
 
 // MEP Before list: one document per item (mepBeforeItems), referencing a
 // canonical ingredient by id rather than embedding its own name/color.
@@ -44,6 +49,7 @@ const mepAfterListEl = document.getElementById('mepAfterList');
 const shopModeTabs = document.getElementById('shopModeTabs');
 const shopAddForm = document.getElementById('shopAddForm');
 const shopAddInput = document.getElementById('shopAddInput');
+const shopSortTabs = document.getElementById('shopSortTabs');
 const shopIngredientListEl = document.getElementById('shopIngredientList');
 const shopListEl = document.getElementById('shopList');
 
@@ -815,10 +821,24 @@ shopModeTabs.addEventListener('click', (e) => {
 function renderShop() {
   shopAddForm.hidden = shopMode !== 'add';
   shopIngredientListEl.hidden = shopMode !== 'add';
+  shopSortTabs.hidden = shopMode !== 'list';
   shopListEl.hidden = shopMode !== 'list';
   if (shopMode === 'add') renderShopAdd();
   else renderShopList();
 }
+
+function sortedShopItems() {
+  if (shopListSort !== 'container') return shopItems;
+  return [...shopItems].sort((a, b) => colorSortIndex(resolveShopItemColor(a)) - colorSortIndex(resolveShopItemColor(b)));
+}
+
+shopSortTabs.addEventListener('click', (e) => {
+  const btn = e.target.closest('.mep-sort-tab');
+  if (!btn) return;
+  shopListSort = btn.dataset.sort;
+  [...shopSortTabs.children].forEach(t => t.classList.toggle('active', t === btn));
+  renderShopList();
+});
 
 // Every canonical ingredient, regardless of whether any recipe currently
 // uses it or it's excluded from MEP — deliberately broader than the MEP
@@ -857,7 +877,7 @@ function renderShopList() {
     return;
   }
 
-  shopItems.forEach(item => {
+  sortedShopItems().forEach(item => {
     const name = resolveShopItemName(item);
     const color = resolveShopItemColor(item);
     const dot = color ? `<span class="ing-dot" style="background:${color}"></span>` : '';

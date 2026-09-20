@@ -57,3 +57,7 @@ When you want one built, just point me at it (or say "build the next one").
 - MEP After Prep/Shop buttons are now toggles: tapping an already-checked "✓ Prep" or "✓ Shop" removes it from that list directly, instead of the button just going disabled once added.
 
 - Shop tab split into two sub-tabs, same source/result split as MEP's After/Before: "Add" lists every ingredient regardless of recipe usage or MEP-exclusion (so something like "Beurre", excluded from prep, can still be shopped for) with a toggle per row, plus the free-form input for one-off items that aren't a recipe ingredient at all; "List" is the resulting checklist, unchanged. Shop's own "+ Shop" toggle on the MEP After list still works as a second way to add.
+
+- Shop List sort: added the same "Order added" / "By color" sort toggle the MEP lists have, sorting by each item's resolved color (an ingredient's container color, or uncolored for free-form items) — same palette-order grouping logic, no-color items last.
+
+- MEP Before's "By color" sort tab relabeled to "By prep color" — it already sorted by the prep-time color (not the container color shown in Recap/After), but the shared "By color" label on both Before and After made that easy to miss since they secretly meant two different fields.
