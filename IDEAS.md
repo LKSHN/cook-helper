@@ -61,3 +61,5 @@ When you want one built, just point me at it (or say "build the next one").
 - Shop List sort: added the same "Order added" / "By color" sort toggle the MEP lists have, sorting by each item's resolved color (an ingredient's container color, or uncolored for free-form items) — same palette-order grouping logic, no-color items last.
 
 - MEP Before's "By color" sort tab relabeled to "By prep color" — it already sorted by the prep-time color (not the container color shown in Recap/After), but the shared "By color" label on both Before and After made that easy to miss since they secretly meant two different fields.
+
+- MEP Before now also has a "By container color" sort (alongside "Order added" and "By prep color") — so it can be grouped either by the Recap/After container color or the Before-specific prep color, not just one or the other. The After list's own sort got relabeled "By container color" too, for symmetry now that "color" isn't ambiguous between the two lists.

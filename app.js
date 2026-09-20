@@ -399,14 +399,29 @@ function beforeItemPrepColor(item) {
   return canonical ? (canonical.prepColor || '') : '';
 }
 
-// 'added' keeps Firestore array order (insertion order); 'container'
-// groups items by their prep-color tag, in palette order, with no-color
-// items last. Not persisted — purely a local view preference.
+// The Before list's own swatch/default sort is prep color (see
+// renderMepBefore), but the underlying ingredient's container color — the
+// Recap/After-list one — is still useful to group by here too, so both
+// are available as sorts even though only prep color is edited from this
+// list.
+function beforeItemColor(item) {
+  const canonical = ingredientsById.get(item.ingredientId);
+  return canonical ? (canonical.color || '') : '';
+}
+
+// 'added' keeps Firestore array order (insertion order); 'prep' and
+// 'container' group items by that color tag, in palette order, with
+// no-color items last. Not persisted — purely a local view preference.
 let mepBeforeSort = 'added';
 
 function sortedMepBefore() {
-  if (mepBeforeSort !== 'container') return mepBefore;
-  return [...mepBefore].sort((a, b) => colorSortIndex(beforeItemPrepColor(a)) - colorSortIndex(beforeItemPrepColor(b)));
+  if (mepBeforeSort === 'prep') {
+    return [...mepBefore].sort((a, b) => colorSortIndex(beforeItemPrepColor(a)) - colorSortIndex(beforeItemPrepColor(b)));
+  }
+  if (mepBeforeSort === 'container') {
+    return [...mepBefore].sort((a, b) => colorSortIndex(beforeItemColor(a)) - colorSortIndex(beforeItemColor(b)));
+  }
+  return mepBefore;
 }
 
 mepSortTabs.addEventListener('click', (e) => {

@@ -428,7 +428,7 @@ button, input, select, textarea{ font-family:inherit; }
 .mep-mode-tab.active{ background:var(--accent-dim); border-color:var(--accent); color:var(--text); }
 
 .mep-sort-tabs{
-  flex-shrink:0; display:flex; gap:6px;
+  flex-shrink:0; display:flex; overflow-x:auto; gap:6px;
   padding:8px 8px 0;
 }
 .mep-sort-tabs[hidden]{ display:none; }
