@@ -1,6 +1,6 @@
 // sw.js — caches the app shell so The Rail opens with zero signal.
 // Recipe data itself lives in Firestore (see db.js), not the cache.
-const CACHE_NAME = 'the-rail-shell-v58';
+const CACHE_NAME = 'the-rail-shell-v59';
 const SHELL_FILES = [
   './',
   './index.html',

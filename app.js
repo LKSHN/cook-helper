@@ -509,19 +509,25 @@ function aggregatedIngredients() {
     .filter(ing => ing.mep !== false && usage.has(ing.id))
     .map(ing => {
       const u = usage.get(ing.id);
-      return { id: ing.id, name: ing.name, color: ing.color || '', unit: u.unit, recipeIds: [...u.recipeIds] };
+      return { id: ing.id, name: ing.name, color: ing.color || '', prepColor: ing.prepColor || '', unit: u.unit, recipeIds: [...u.recipeIds] };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-// 'name' is aggregatedIngredients()'s default alphabetical order;
-// 'container' groups by color in palette order, no-color items last. Not
-// persisted — purely a local view preference, same as mepBeforeSort.
+// 'name' is aggregatedIngredients()'s default alphabetical order; 'prep'
+// and 'container' group by that color, in palette order, no-color items
+// last. Not persisted — purely a local view preference, same as
+// mepBeforeSort/shopAddSort.
 let mepAfterSort = 'name';
 
 function sortedAfterItems(items) {
-  if (mepAfterSort !== 'container') return items;
-  return [...items].sort((a, b) => colorSortIndex(a.color) - colorSortIndex(b.color));
+  if (mepAfterSort === 'prep') {
+    return [...items].sort((a, b) => colorSortIndex(a.prepColor) - colorSortIndex(b.prepColor));
+  }
+  if (mepAfterSort === 'container') {
+    return [...items].sort((a, b) => colorSortIndex(a.color) - colorSortIndex(b.color));
+  }
+  return items;
 }
 
 mepAfterSortTabs.addEventListener('click', (e) => {
@@ -542,17 +548,25 @@ function renderMepAfter() {
     return;
   }
 
+  // Alphabetical and "By container color" both show/edit container color
+  // (the list's long-standing default); only "By prep color" switches the
+  // swatch to the prep-time one — same convention as Shop's Add tab.
+  const showingPrep = mepAfterSort === 'prep';
+  const swatchClass = showingPrep ? 'ing-prep-color-btn' : 'ing-color-btn';
+  const swatchLabel = showingPrep ? 'Set prep-time color' : 'Set container color';
+
   items.forEach(ing => {
     // Kept as the actual list-item (not just a boolean) so a click can
     // remove it directly — the After list is a toggle for both lists, not
     // a one-way add.
     const beforeItem = mepBefore.find(i => i.ingredientId === ing.id);
     const shopItem = shopItems.find(i => i.ingredientId === ing.id);
+    const displayColor = (showingPrep ? ing.prepColor : ing.color) || '';
 
     const row = document.createElement('div');
     row.className = 'mep-add-row';
     row.innerHTML = `
-      <button type="button" class="ing-color-btn" aria-label="Set container color" style="${ing.color ? `background:${ing.color}` : ''}"></button>
+      <button type="button" class="${swatchClass}" aria-label="${swatchLabel}" style="${displayColor ? `background:${displayColor}` : ''}"></button>
       <span class="mep-add-name clickable">${escapeHtml(ing.name)}</span>
       <div class="mep-add-actions">
         <button type="button" class="mep-add-btn${beforeItem ? ' active' : ''}" data-action="before" aria-label="${beforeItem ? 'Remove from prep list' : 'Add to prep list'}">${beforeItem ? '&check; Prep' : '+ Prep'}</button>
@@ -564,9 +578,12 @@ function renderMepAfter() {
       const matches = recipes.filter(r => ing.recipeIds.includes(r.id));
       toggleIngredientRecipePicker(row, matches, ing);
     });
-    row.querySelector('.ing-color-btn').addEventListener('click', (e) => {
+    row.querySelector(`.${swatchClass}`).addEventListener('click', (e) => {
       e.stopPropagation();
-      toggleColorPicker(row, ing.color || '', (color) => RailDB.putIngredient({ ...ingredientsById.get(ing.id), color }));
+      toggleColorPicker(row, displayColor, (newColor) => {
+        const patch = showingPrep ? { prepColor: newColor } : { color: newColor };
+        RailDB.putIngredient({ ...ingredientsById.get(ing.id), ...patch });
+      });
     });
     row.querySelector('[data-action="before"]').addEventListener('click', () => {
       if (beforeItem) removeFromBeforeList(beforeItem.id);
