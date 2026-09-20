@@ -13,6 +13,10 @@ let mepMode = 'before';
 // Drives the Before list UI and the After list's "already added" check.
 let mepBefore = [];
 
+// Shop tab: a restock checklist, same one-doc-per-item shape as mepBefore —
+// see db.js shopItemsRef.
+let shopItems = [];
+
 // Canonical ingredient records (see IDEAS.md "Data structure"). Recap, the
 // recipe edit form, and the MEP After/Before lists all read and write
 // through these — see resolveIngredientDisplay below.
@@ -35,6 +39,10 @@ const mepSortTabs = document.getElementById('mepSortTabs');
 const mepAfterSortTabs = document.getElementById('mepAfterSortTabs');
 const mepBeforeListEl = document.getElementById('mepBeforeList');
 const mepAfterListEl = document.getElementById('mepAfterList');
+
+const shopAddForm = document.getElementById('shopAddForm');
+const shopAddInput = document.getElementById('shopAddInput');
+const shopListEl = document.getElementById('shopList');
 
 const STATION_ORDER = ['starters', 'mains', 'desserts'];
 
@@ -119,6 +127,16 @@ function loadMepBeforeItems() {
   });
 }
 
+function loadShopItems() {
+  RailDB.onChangeShopItems((items) => {
+    shopItems = items;
+    if (activeView === 'shop') renderShop();
+    // A shop item's "already added" state on the After list depends on
+    // shopItems too, so a change here can also affect that render.
+    if (activeView === 'mep' && mepMode === 'after') renderMepAfter();
+  });
+}
+
 function loadIngredients() {
   RailDB.onChangeIngredients((data) => {
     ingredients = data;
@@ -126,6 +144,7 @@ function loadIngredients() {
     render();
     syncAllMepButtons();
     if (activeView === 'mep') renderMep();
+    if (activeView === 'shop') renderShop();
   });
 }
 
@@ -331,6 +350,7 @@ viewTabs.addEventListener('click', (e) => {
   searchWrap.hidden = activeView !== 'recap';
   addBtn.hidden = activeView !== 'recap';
   if (activeView === 'mep') renderMep();
+  if (activeView === 'shop') renderShop();
 });
 
 // ---- MEP mode tabs (Before / After) ----
@@ -483,14 +503,18 @@ function renderMepAfter() {
   }
 
   items.forEach(ing => {
-    const already = mepBefore.some(i => i.ingredientId === ing.id);
+    const alreadyBefore = mepBefore.some(i => i.ingredientId === ing.id);
+    const alreadyShop = shopItems.some(i => i.ingredientId === ing.id);
 
     const row = document.createElement('div');
     row.className = 'mep-add-row';
     row.innerHTML = `
       <button type="button" class="ing-color-btn" aria-label="Set container color" style="${ing.color ? `background:${ing.color}` : ''}"></button>
       <span class="mep-add-name clickable">${escapeHtml(ing.name)}</span>
-      <button type="button" class="mep-add-btn" ${already ? 'disabled' : ''} aria-label="Add to prep list">${already ? '&check;' : '+'}</button>
+      <div class="mep-add-actions">
+        <button type="button" class="mep-add-btn" data-action="before" ${alreadyBefore ? 'disabled' : ''} aria-label="Add to prep list">${alreadyBefore ? '&check; Prep' : '+ Prep'}</button>
+        <button type="button" class="mep-add-btn" data-action="shop" ${alreadyShop ? 'disabled' : ''} aria-label="Add to shopping list">${alreadyShop ? '&check; Shop' : '+ Shop'}</button>
+      </div>
     `;
     row.querySelector('.mep-add-name').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -501,8 +525,11 @@ function renderMepAfter() {
       e.stopPropagation();
       toggleColorPicker(row, ing.color || '', (color) => RailDB.putIngredient({ ...ingredientsById.get(ing.id), color }));
     });
-    if (!already) {
-      row.querySelector('.mep-add-btn').addEventListener('click', () => addToBeforeList(ing.id, ing.unit));
+    if (!alreadyBefore) {
+      row.querySelector('[data-action="before"]').addEventListener('click', () => addToBeforeList(ing.id, ing.unit));
+    }
+    if (!alreadyShop) {
+      row.querySelector('[data-action="shop"]').addEventListener('click', () => addToShopList(ing.id));
     }
     mepAfterListEl.appendChild(row);
   });
@@ -735,6 +762,71 @@ function updateBeforeItem(id, patch) {
   if (!item) return;
   RailDB.putMepBeforeItem({ ...item, ...patch });
 }
+
+// ---- Shop tab: a restock checklist ----
+// An item either references a canonical ingredient (added from the MEP
+// After list — resolves its name/color live, same as Before-list items)
+// or is free-form (typed directly here, for things like paper towels that
+// aren't a recipe ingredient at all).
+function resolveShopItemName(item) {
+  if (!item.ingredientId) return item.name || '';
+  const canonical = ingredientsById.get(item.ingredientId);
+  return canonical ? canonical.name : '';
+}
+
+function resolveShopItemColor(item) {
+  if (!item.ingredientId) return '';
+  const canonical = ingredientsById.get(item.ingredientId);
+  return canonical ? (canonical.color || '') : '';
+}
+
+function addToShopList(ingredientId) {
+  if (shopItems.some(i => i.ingredientId === ingredientId)) return;
+  RailDB.putShopItem({ id: uid(), ingredientId, name: null, addedAt: Date.now() });
+}
+
+function addFreeformShopItem(text) {
+  const name = text.trim();
+  if (!name) return;
+  RailDB.putShopItem({ id: uid(), ingredientId: null, name, addedAt: Date.now() });
+}
+
+function removeShopItem(id) {
+  RailDB.removeShopItem(id);
+}
+
+function renderShop() {
+  shopListEl.innerHTML = '';
+  if (!shopItems.length) {
+    shopListEl.innerHTML = '<div class="mep-empty">Nothing to buy yet.<br>Add an item above, or from the MEP After tab.</div>';
+    return;
+  }
+
+  shopItems.forEach(item => {
+    const name = resolveShopItemName(item);
+    const color = resolveShopItemColor(item);
+    const dot = color ? `<span class="ing-dot" style="background:${color}"></span>` : '';
+
+    const row = document.createElement('div');
+    row.className = 'mep-row';
+    row.innerHTML = `
+      <button type="button" class="mep-check" aria-label="Mark bought">&#10003;</button>
+      <span class="mep-row-name">${dot}${escapeHtml(name)}</span>
+      <button type="button" class="mep-row-remove" aria-label="Remove">&times;</button>
+    `;
+
+    row.querySelector('.mep-check').addEventListener('click', () => removeShopItem(item.id));
+    row.querySelector('.mep-row-remove').addEventListener('click', () => removeShopItem(item.id));
+
+    shopListEl.appendChild(row);
+  });
+}
+
+shopAddForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  addFreeformShopItem(shopAddInput.value);
+  shopAddInput.value = '';
+});
 
 // ---- Search ----
 searchInput.addEventListener('input', (e) => {
@@ -1353,4 +1445,5 @@ if ('caches' in window) {
 
 loadRecipes();
 loadMepBeforeItems();
+loadShopItems();
 loadIngredients();

@@ -28,6 +28,13 @@ const recipesRef = firestore.collection('recipes');
 const ingredientsRef = firestore.collection('ingredients');
 const mepBeforeItemsRef = firestore.collection('mepBeforeItems');
 
+// Shop tab: a restock checklist, same one-doc-per-item shape as
+// mepBeforeItems. An item either references a canonical ingredient
+// (ingredientId set, added from the MEP After list) or is free-form
+// (name set instead, typed directly into the Shop tab for things like
+// paper towels that aren't a recipe ingredient).
+const shopItemsRef = firestore.collection('shopItems');
+
 const RailDB = {
   // Subscribes to live changes; calls cb(recipes) immediately and on every
   // local or remote change. Returns an unsubscribe function.
@@ -81,5 +88,18 @@ const RailDB = {
   },
   async removeMepBeforeItem(id) {
     await mepBeforeItemsRef.doc(id).delete();
+  },
+  // Shop restock checklist — see shopItemsRef above.
+  onChangeShopItems(cb) {
+    return shopItemsRef.onSnapshot((snap) => {
+      cb(snap.docs.map((d) => d.data()));
+    });
+  },
+  async putShopItem(item) {
+    await shopItemsRef.doc(item.id).set(item);
+    return item;
+  },
+  async removeShopItem(id) {
+    await shopItemsRef.doc(id).delete();
   }
 };

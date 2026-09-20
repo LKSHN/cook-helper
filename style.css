@@ -453,6 +453,23 @@ button, input, select, textarea{ font-family:inherit; }
   color:var(--text-dim); font-size:14px; text-align:center; padding:40px 20px;
 }
 
+/* Shop tab: free-form add bar above the restock checklist */
+.shop-add-form{
+  flex-shrink:0; display:flex; gap:8px;
+  padding:14px 16px 0;
+}
+.shop-add-form input{
+  flex:1; min-width:0; padding:11px 14px;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; color:var(--text); font-size:15px;
+}
+.shop-add-form input:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+.shop-add-submit{
+  flex:0 0 auto; width:44px; height:44px; border-radius:10px;
+  background:var(--accent); color:#0B1620; border:none;
+  font-size:20px; font-weight:600; cursor:pointer;
+}
+
 /* Possible-duplicate ingredient banner + review panel */
 .dup-banner{
   flex-shrink:0; display:block; width:calc(100% - 32px); text-align:left;
@@ -532,10 +549,11 @@ button, input, select, textarea{ font-family:inherit; }
   border-radius:7px 7px 0 0; margin-bottom:2px; padding-bottom:11px;
 }
 .recipe-picker-item:active{ background:var(--surface); }
+.mep-add-actions{ flex:0 0 auto; display:flex; gap:6px; }
 .mep-add-btn{
-  flex:0 0 auto; width:32px; height:32px; border-radius:8px;
+  flex:0 0 auto; padding:8px 12px; border-radius:8px;
   background:var(--accent); color:#0B1620; border:none;
-  font-size:18px; font-weight:600; line-height:1; cursor:pointer;
+  font-size:12px; font-weight:600; line-height:1; cursor:pointer; white-space:nowrap;
 }
 .mep-add-btn[disabled]{
   background:var(--surface-raised); color:var(--text-dim); cursor:default;

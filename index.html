@@ -80,11 +80,15 @@
     <div id="mepAfterList" class="mep-list" hidden></div>
   </div>
 
-  <!-- Shop view (placeholder for now) -->
+  <!-- Shop view: a restock checklist — check an item off once you've
+       bought it. Items come from the MEP After list ("+ Shop") or get
+       typed in directly here for things that aren't a recipe ingredient. -->
   <div id="shopView" class="view" hidden>
-    <div class="empty-state">
-      <p class="empty-title">Shop is coming soon.</p>
-    </div>
+    <form id="shopAddForm" class="shop-add-form">
+      <input type="text" id="shopAddInput" placeholder="Add an item (e.g. paper towels)" autocomplete="off">
+      <button type="submit" class="shop-add-submit" aria-label="Add item">+</button>
+    </form>
+    <div id="shopList" class="mep-list"></div>
   </div>
 
 </div>

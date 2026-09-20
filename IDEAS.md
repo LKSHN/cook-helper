@@ -3,8 +3,6 @@
 Drop anything here — one line or a whole paragraph, doesn't need to be polished.
 When you want one built, just point me at it (or say "build the next one").
 
-- Shop tab: currently just a placeholder ("Shop is coming soon.") — build out what it should actually do
-
 ## Done
 (move items here once built, so the list above stays current)
 
@@ -53,3 +51,5 @@ When you want one built, just point me at it (or say "build the next one").
 - Prep-time color: ingredients now have a second, independent color tag (square swatch, next to the existing round container-color one) for how long something takes to prep. The MEP Before list's swatch and "By color" sort now use this prep color instead of the container color, which stays the Recap/After-list concept as before.
 
 - MEP Before: dropped the quantity field — replaced with a free-text, optional comment/note field per item.
+
+- Shop tab: built out as a restock checklist — check an item off once you've bought it, same "tap to remove" interaction as the MEP Before list. Items either come from the MEP After list (a new "+ Shop" button alongside the existing "+ Prep" one, so an ingredient can go to either list independently) or get typed straight into the Shop tab for things that aren't a recipe ingredient at all (paper towels, cleaning supplies). Synced via its own `shopItems` collection, same one-doc-per-item pattern as the Before list.
