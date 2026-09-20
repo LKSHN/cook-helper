@@ -503,8 +503,11 @@ function renderMepAfter() {
   }
 
   items.forEach(ing => {
-    const alreadyBefore = mepBefore.some(i => i.ingredientId === ing.id);
-    const alreadyShop = shopItems.some(i => i.ingredientId === ing.id);
+    // Kept as the actual list-item (not just a boolean) so a click can
+    // remove it directly — the After list is a toggle for both lists, not
+    // a one-way add.
+    const beforeItem = mepBefore.find(i => i.ingredientId === ing.id);
+    const shopItem = shopItems.find(i => i.ingredientId === ing.id);
 
     const row = document.createElement('div');
     row.className = 'mep-add-row';
@@ -512,8 +515,8 @@ function renderMepAfter() {
       <button type="button" class="ing-color-btn" aria-label="Set container color" style="${ing.color ? `background:${ing.color}` : ''}"></button>
       <span class="mep-add-name clickable">${escapeHtml(ing.name)}</span>
       <div class="mep-add-actions">
-        <button type="button" class="mep-add-btn" data-action="before" ${alreadyBefore ? 'disabled' : ''} aria-label="Add to prep list">${alreadyBefore ? '&check; Prep' : '+ Prep'}</button>
-        <button type="button" class="mep-add-btn" data-action="shop" ${alreadyShop ? 'disabled' : ''} aria-label="Add to shopping list">${alreadyShop ? '&check; Shop' : '+ Shop'}</button>
+        <button type="button" class="mep-add-btn${beforeItem ? ' active' : ''}" data-action="before" aria-label="${beforeItem ? 'Remove from prep list' : 'Add to prep list'}">${beforeItem ? '&check; Prep' : '+ Prep'}</button>
+        <button type="button" class="mep-add-btn${shopItem ? ' active' : ''}" data-action="shop" aria-label="${shopItem ? 'Remove from shopping list' : 'Add to shopping list'}">${shopItem ? '&check; Shop' : '+ Shop'}</button>
       </div>
     `;
     row.querySelector('.mep-add-name').addEventListener('click', (e) => {
@@ -525,12 +528,14 @@ function renderMepAfter() {
       e.stopPropagation();
       toggleColorPicker(row, ing.color || '', (color) => RailDB.putIngredient({ ...ingredientsById.get(ing.id), color }));
     });
-    if (!alreadyBefore) {
-      row.querySelector('[data-action="before"]').addEventListener('click', () => addToBeforeList(ing.id, ing.unit));
-    }
-    if (!alreadyShop) {
-      row.querySelector('[data-action="shop"]').addEventListener('click', () => addToShopList(ing.id));
-    }
+    row.querySelector('[data-action="before"]').addEventListener('click', () => {
+      if (beforeItem) removeFromBeforeList(beforeItem.id);
+      else addToBeforeList(ing.id, ing.unit);
+    });
+    row.querySelector('[data-action="shop"]').addEventListener('click', () => {
+      if (shopItem) removeShopItem(shopItem.id);
+      else addToShopList(ing.id);
+    });
     mepAfterListEl.appendChild(row);
   });
 }

@@ -552,11 +552,12 @@ button, input, select, textarea{ font-family:inherit; }
 .mep-add-actions{ flex:0 0 auto; display:flex; gap:6px; }
 .mep-add-btn{
   flex:0 0 auto; padding:8px 12px; border-radius:8px;
-  background:var(--accent); color:#0B1620; border:none;
+  background:var(--accent); color:#0B1620; border:2px solid transparent;
   font-size:12px; font-weight:600; line-height:1; cursor:pointer; white-space:nowrap;
 }
-.mep-add-btn[disabled]{
-  background:var(--surface-raised); color:var(--text-dim); cursor:default;
+/* Already on that list — still clickable, tap again to take it off. */
+.mep-add-btn.active{
+  background:var(--accent-dim); color:var(--text); border-color:var(--accent);
 }
 
 /* Toast */
